@@ -1,0 +1,45 @@
+{
+  "datasets": [
+    {
+      "available_n": 1428,
+      "dataset_set": "m3_m4_monthly",
+      "frequency": "monthly",
+      "horizon": 18,
+      "requested_n": 750,
+      "season_length": 12,
+      "shortfall": 0,
+      "source_dataset": "M3_Monthly"
+    },
+    {
+      "available_n": 48000,
+      "dataset_set": "m3_m4_monthly",
+      "frequency": "monthly",
+      "horizon": 18,
+      "requested_n": 750,
+      "season_length": 12,
+      "shortfall": 0,
+      "source_dataset": "M4_Monthly"
+    },
+    {
+      "available_n": 756,
+      "dataset_set": "m3_m4_quarterly",
+      "frequency": "quarterly",
+      "horizon": 8,
+      "requested_n": 750,
+      "season_length": 4,
+      "shortfall": 0,
+      "source_dataset": "M3_Quarterly"
+    },
+    {
+      "available_n": 24000,
+      "dataset_set": "m3_m4_quarterly",
+      "frequency": "quarterly",
+      "horizon": 8,
+      "requested_n": 750,
+      "season_length": 4,
+      "shortfall": 0,
+      "source_dataset": "M4_Quarterly"
+    }
+  ],
+  "run_id": "run_20260525T112121"
+}

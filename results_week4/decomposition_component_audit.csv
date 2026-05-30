@@ -1,0 +1,10 @@
+family,variant,uses_decomposition,model_forecast_component,seasonal_forecast_method,reconstruction_method,is_component_handling_clear,notes
+mlforecast,with_mstl,True,seasonally adjusted log signal,seasonal naive on MSTL seasonal_log component,"add model forecast and seasonal forecast in log scale, then invert transform",True,Implemented in Week 3 MSTL runners.
+mlforecast,without_mstl,False,original transformed or original series depending on family runner,none inside direct model,direct forecast output,True,Direct comparison branch.
+neuralforecast,with_mstl,True,seasonally adjusted log signal,seasonal naive on MSTL seasonal_log component,"add model forecast and seasonal forecast in log scale, then invert transform",True,Implemented in Week 3 MSTL runners.
+neuralforecast,without_mstl,False,original transformed or original series depending on family runner,none inside direct model,direct forecast output,True,Direct comparison branch.
+transformer,with_mstl,True,seasonally adjusted log signal,seasonal naive on MSTL seasonal_log component,"add model forecast and seasonal forecast in log scale, then invert transform",True,Implemented in Week 3 MSTL runners.
+transformer,without_mstl,False,original transformed or original series depending on family runner,none inside direct model,direct forecast output,True,Direct comparison branch.
+statistical,with_mstl,True,seasonally adjusted log signal,seasonal naive on MSTL seasonal_log component,"add model forecast and seasonal forecast in log scale, then invert transform",True,Implemented in Week 3 MSTL runners.
+statistical,without_mstl,False,original transformed or original series depending on family runner,none inside direct model,direct forecast output,True,Direct comparison branch.
+baseline,without_mstl,False,original series,seasonal naive baseline,direct seasonal naive forecast,True,Baseline only; excluded from decomposition-delta comparisons.

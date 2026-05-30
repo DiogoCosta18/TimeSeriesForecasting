@@ -1,0 +1,33 @@
+comparates,transformer,neuralforecast,statistical,mlforecast
+transformer,"Mean-Difference
+r<c / r=c / r>c
+Wilcoxon p-value","-0.1162
+517 / 0 / 470
+ $\leq$ 1e-04","-0.1502
+467 / 0 / 520
+0.3730","-0.1819
+521 / 0 / 466
+ $\leq$ 1e-04"
+neuralforecast,"0.1162
+470 / 0 / 517
+ $\leq$ 1e-04",-,"-0.0339
+408 / 0 / 579
+0.0007","-0.0656
+476 / 0 / 511
+0.7021"
+statistical,"0.1502
+520 / 0 / 467
+0.3730","0.0339
+579 / 0 / 408
+0.0007",-,"-0.0317
+567 / 0 / 420
+ $\leq$ 1e-04"
+mlforecast,"0.1819
+466 / 0 / 521
+ $\leq$ 1e-04","0.0656
+511 / 0 / 476
+0.7021","0.0317
+420 / 0 / 567
+ $\leq$ 1e-04","If in bold, then
+p-value < 0.05
+Holm correction"
