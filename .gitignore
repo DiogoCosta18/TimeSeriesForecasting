@@ -1,0 +1,29 @@
+# Ignore everything by default.
+*
+
+# Track only the consolidated paper workspace.
+!paper_workspace/
+!paper_workspace/**
+
+# Exclude large parquets that exceed GitHub's 100MB limit.
+# Raw run results — big files
+paper_workspace/run_results/cv/fold_forecasts.parquet
+paper_workspace/run_results/cv/fold_metrics.parquet
+paper_workspace/run_results/cv/fold_naive_forecasts.parquet
+paper_workspace/run_results/finetuning/bucket_finetune_metrics.parquet
+
+# Rebuilt analysis parquets — big files
+paper_workspace/notebooks/data/master_metrics.parquet
+paper_workspace/notebooks/data/stl_delta.parquet
+paper_workspace/notebooks/data/bucket_ft_delta.parquet
+
+# Runtime noise
+paper_workspace/notebooks/**/.ipynb_checkpoints/
+paper_workspace/notebooks/**/__pycache__/
+paper_workspace/tex/*.synctex.gz
+paper_workspace/tex/*.fls
+paper_workspace/tex/*.fdb_latexmk
+paper_workspace/tex/*.aux
+paper_workspace/tex/*.log
+paper_workspace/tex/*.out
+paper_workspace/tex/*.blg
