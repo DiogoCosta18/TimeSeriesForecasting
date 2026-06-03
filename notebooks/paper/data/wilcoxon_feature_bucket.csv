@@ -1,0 +1,69 @@
+feature_name,feature_bucket,model_family,n,mean_delta,p_raw,p_adj,sig,verdict
+feature_arch_stat,High,mlforecast,12000,-0.3360184722714637,9.641583437789697e-74,3.8566333751158787e-72,True,Always Hurts
+feature_arch_stat,High,neuralforecast,9000,-0.1918923905881105,0.6589661921146074,1.0,False,Mixed
+feature_arch_stat,High,statistical,9000,-0.018620125896154173,3.0883936773468103e-80,1.3280092812591284e-78,True,Always Hurts
+feature_arch_stat,High,transformers,6000,0.05905778261487939,3.4178154229633925e-172,2.0165110995484017e-170,True,Always Helps
+feature_arch_stat,Low,mlforecast,11796,-0.1022382088519854,2.3797495897328522e-17,5.47342405638556e-16,True,Always Hurts
+feature_arch_stat,Low,neuralforecast,8847,-0.046623523043613266,3.0087773205544587e-06,5.1149214449425795e-05,True,Always Hurts
+feature_arch_stat,Low,statistical,8847,-0.008314635390090527,2.043685604161427e-78,8.379110977061851e-77,True,Always Hurts
+feature_arch_stat,Low,transformers,5898,0.046450127284187,1.5798171426068394e-129,8.531012570076933e-128,True,Always Helps
+feature_arch_stat,Medium,mlforecast,12000,-0.15642029779215832,9.763870810917634e-36,2.636245118947761e-34,True,Always Hurts
+feature_arch_stat,Medium,neuralforecast,9000,-0.07290557510548981,0.0003737511548405168,0.005232516167767235,True,Always Hurts
+feature_arch_stat,Medium,statistical,9000,0.006968682210490737,1.0139362024316589e-63,3.4473830882676403e-62,True,Always Helps
+feature_arch_stat,Medium,transformers,6000,0.06656557148802358,2.8254768961859483e-184,1.7800504445971474e-182,True,Always Helps
+feature_evolving_seasonality,High,mlforecast,12000,-0.23783018360838215,2.629159269792365e-40,7.887477809377094e-39,True,Always Hurts
+feature_evolving_seasonality,High,neuralforecast,9000,-0.13109386791524416,0.0008297462923572412,0.010786701800644135,True,Always Hurts
+feature_evolving_seasonality,High,statistical,9000,-0.006735120057283228,7.475210678292588e-80,3.139588484882887e-78,True,Always Hurts
+feature_evolving_seasonality,High,transformers,6000,0.056434974958042915,4.315990654485272e-173,2.589594392691163e-171,True,Always Helps
+feature_evolving_seasonality,Low,mlforecast,11796,-0.1480981369028452,2.149145193252652e-28,5.587777502456896e-27,True,Always Hurts
+feature_evolving_seasonality,Low,neuralforecast,8847,-0.06851294094571546,9.287973785887502e-08,1.6718352814597502e-06,True,Always Hurts
+feature_evolving_seasonality,Low,statistical,8847,-0.004957910637489316,5.835459382900197e-70,2.159119971673073e-68,True,Always Hurts
+feature_evolving_seasonality,Low,transformers,5898,0.06995373560208235,4.349507465018969e-195,2.7836847776121403e-193,True,Always Helps
+feature_evolving_seasonality,Medium,mlforecast,12000,-0.196978820523905,5.095926426763094e-37,1.477818663761297e-35,True,Always Hurts
+feature_evolving_seasonality,Medium,neuralforecast,9000,-0.11145410334284231,0.16184903315676658,0.9710941989405995,False,Mixed
+feature_evolving_seasonality,Medium,statistical,9000,-0.03240320919311555,1.0811247460743374e-108,5.405623730371687e-107,True,Always Hurts
+feature_evolving_seasonality,Medium,transformers,6000,0.045194110290487685,1.8195254237223596e-123,9.46153220335627e-122,True,Always Helps
+feature_non_normality,High,mlforecast,12000,-0.3119716723792388,2.922347547451436e-61,9.643746906589738e-60,True,Always Hurts
+feature_non_normality,High,neuralforecast,9000,-0.1960066874405266,0.015262614643725088,0.15262614643725086,False,Mixed
+feature_non_normality,High,statistical,9000,0.002706224408442793,3.1287209957507253e-68,1.0950523485127539e-66,True,Always Helps
+feature_non_normality,High,transformers,6000,0.050527335302592256,4.3087807801574795e-169,2.4990928524913382e-167,True,Always Helps
+feature_non_normality,Low,mlforecast,11796,-0.10464524253944517,6.490706640443634e-13,1.2981413280887268e-11,True,Always Hurts
+feature_non_normality,Low,neuralforecast,8847,-0.04903565273397191,2.750316469978213e-09,5.225601292958605e-08,True,Always Hurts
+feature_non_normality,Low,statistical,8847,-0.006638786101922164,5.091355270505104e-69,1.8328878973818375e-67,True,Always Hurts
+feature_non_normality,Low,transformers,5898,0.06823639330123199,7.239413608198087e-181,4.488436437082814e-179,True,Always Helps
+feature_non_normality,Medium,mlforecast,12000,-0.15678665930568106,8.11251047258967e-28,2.0281276181474176e-26,True,Always Hurts
+feature_non_normality,Medium,neuralforecast,9000,-0.0861262523417484,0.05804973356050798,0.40634813492355587,False,Mixed
+feature_non_normality,Medium,statistical,9000,-0.021305823331336314,1.73321724675235e-95,8.319442784411281e-94,True,Always Hurts
+feature_non_normality,Medium,transformers,6000,0.06757881516840346,1.4776461242211386e-173,9.013641357748946e-172,True,Always Helps
+feature_nonlinearity,High,mlforecast,4572,-0.060057377967362754,0.5164396789367574,1.0,False,Mixed
+feature_nonlinearity,High,neuralforecast,3429,-0.0391575575454804,0.02336793581907156,0.2063420902343841,False,Mixed
+feature_nonlinearity,High,statistical,3429,0.005221251657249541,1.67042998588283e-24,4.009031966118792e-23,True,Always Helps
+feature_nonlinearity,High,transformers,2286,-0.019751187917514717,5.707539399036673e-05,0.0008561309098555009,True,Always Hurts
+feature_nonlinearity,Low,mlforecast,31224,-0.2162869422566212,2.2089962687505012e-125,1.1707680224377656e-123,True,Always Hurts
+feature_nonlinearity,Low,neuralforecast,23418,-0.12092287784045236,0.022926898914931566,0.2063420902343841,False,Mixed
+feature_nonlinearity,Low,statistical,23418,-0.01300626947979797,6.097242519045197e-219,3.9632076373793785e-217,True,Always Hurts
+feature_nonlinearity,Low,transformers,15612,0.06831763173536869,0.0,0.0,True,Always Helps
+feature_spectral_entropy,High,mlforecast,11856,-0.044197149934438205,0.5464890949615028,1.0,False,Mixed
+feature_spectral_entropy,High,neuralforecast,8892,-0.022855849102471078,4.436654201474982e-14,9.76063924324496e-13,True,Always Hurts
+feature_spectral_entropy,High,statistical,8892,-0.01452726107091071,2.53723726318977e-71,9.641501600121126e-70,True,Always Hurts
+feature_spectral_entropy,High,transformers,5928,0.029756276623132055,5.7150379972577094e-92,2.5717670987659692e-90,True,Always Helps
+feature_spectral_entropy,Low,mlforecast,11980,-0.3690320590884276,1.5437540640498174e-129,8.490647352273996e-128,True,Always Hurts
+feature_spectral_entropy,Low,neuralforecast,8985,-0.215227544654327,2.8902146639538713e-05,0.0004624343462326194,True,Always Hurts
+feature_spectral_entropy,Low,statistical,8985,0.010007961573620381,7.908327345582048e-46,2.4515814771304347e-44,True,Always Helps
+feature_spectral_entropy,Low,transformers,5990,0.06989568909371911,2.35210307760731e-157,1.3171777234600936e-155,True,Always Helps
+feature_spectral_entropy,Medium,mlforecast,11960,-0.15836466731104934,1.5396915263809848e-53,4.927012884419151e-52,True,Always Hurts
+feature_spectral_entropy,Medium,neuralforecast,8970,-0.07858126552331125,0.003854133879403907,0.046249606552846885,True,Always Hurts
+feature_spectral_entropy,Medium,statistical,8970,-0.015266027948872886,1.648210067100929e-109,8.405871342214738e-108,True,Always Hurts
+feature_spectral_entropy,Medium,transformers,5980,0.10881588679898521,1.0054093028375817e-282,6.736242329011798e-281,True,Always Helps
+feature_structural_break_strength,High,mlforecast,12000,-0.26511433752339253,6.649466701868052e-93,3.058754682859304e-91,True,Always Hurts
+feature_structural_break_strength,High,neuralforecast,9000,-0.16737508501043688,0.008144771564221519,0.0895924872064367,False,Mixed
+feature_structural_break_strength,High,statistical,9000,0.025934852686338702,3.288658408979132e-36,9.208243545141571e-35,True,Always Helps
+feature_structural_break_strength,High,transformers,6000,0.05881947207647544,2.626209087641966e-161,1.4969391799559207e-159,True,Always Helps
+feature_structural_break_strength,Low,mlforecast,11796,-0.10397773099589505,0.3072820746963154,1.0,False,Mixed
+feature_structural_break_strength,Low,neuralforecast,8847,-0.06419808937773426,2.935334754662866e-13,6.164202984792019e-12,True,Always Hurts
+feature_structural_break_strength,Low,statistical,8847,-0.015943849793607613,5.227367653100033e-84,2.3000417673640147e-82,True,Always Hurts
+feature_structural_break_strength,Low,transformers,5898,0.04575817385042944,3.111126008126344e-95,1.4622292238193816e-93,True,Always Helps
+feature_structural_break_strength,Medium,mlforecast,12000,-0.2098546153730243,9.686760444251461e-73,3.77783657325807e-71,True,Always Hurts
+feature_structural_break_strength,Medium,neuralforecast,9000,-0.12150053524850586,0.3676057704431358,1.0,False,Mixed
+feature_structural_break_strength,Medium,statistical,9000,-0.025698869427850348,1.4180297753095746e-99,6.948345899016915e-98,True,Always Hurts
+feature_structural_break_strength,Medium,transformers,6000,0.11270952852109546,1.2911690043644425e-261,8.521715428805321e-260,True,Always Helps

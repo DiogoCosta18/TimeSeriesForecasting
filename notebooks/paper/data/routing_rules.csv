@@ -1,0 +1,18 @@
+feat_label,feature_bucket,ML,Neural,Statistical,Transformers
+ARCH Stat,High,STL-AC,STL-AC,STL-AC,STL-AC
+ARCH Stat,Low,STL-SN,STL-SN,STL-SN,STL-SN
+ARCH Stat,Medium,STL-AC,STL-SN,STL-SN,STL-SN
+Evolving Seasonality,High,STL-AC,STL-AC,STL-AC,STL-AC
+Evolving Seasonality,Low,STL-SN,STL-SN,STL-SN,STL-SN
+Evolving Seasonality,Medium,STL-AC,STL-AC,STL-AC,STL-AC
+Non-Normality,High,STL-AC,STL-SN,STL-SN,STL-SN
+Non-Normality,Low,STL-AC,STL-AC,STL-AC,STL-AC
+Non-Normality,Medium,STL-AC,STL-SN,STL-SN,STL-SN
+Nonlinearity,High,STL-SN,STL-SN,STL-SN,STL-SN
+Nonlinearity,Low,STL-AC,STL-SN,STL-SN,STL-SN
+Spectral Entropy,High,STL-AC,STL-AC,STL-SN,STL-SN
+Spectral Entropy,Low,STL-SN,STL-SN,STL-SN,STL-SN
+Spectral Entropy,Medium,STL-SN,STL-SN,STL-SN,STL-SN
+Structural Break,High,STL-SN,STL-AC,STL-SN,STL-SN
+Structural Break,Low,STL-SN,STL-SN,STL-SN,STL-SN
+Structural Break,Medium,STL-SN,STL-AC,STL-SN,STL-SN

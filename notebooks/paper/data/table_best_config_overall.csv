@@ -1,0 +1,13 @@
+rank,model_name,config,model_family,decomposition_method,mean,median,n,decomp
+1,AutoETS,global,statistical,without_stl,0.888421379930013,0.7913681177845338,53694,Direct
+2,AutoARIMA,global,statistical,without_stl,0.9408299323314622,0.7983093005884975,53694,Direct
+3,AutoSARIMA,global,statistical,without_stl,0.9408299323314622,0.7983093005884975,53694,Direct
+4,AutoNHITS,finetuned,neuralforecast,without_stl,1.0077225851849725,0.8232534644954471,53694,Direct
+5,AutoNLinear,global,neuralforecast,stl_model_all_components,0.9366572791417256,0.8287059507396909,53694,STL-AC
+6,AutoRidge,global,mlforecast,stl_model_all_components,0.9374036105408795,0.8319289794841813,53694,STL-AC
+7,AutoLinearRegression,global,mlforecast,stl_model_all_components,0.9381237636320303,0.8331588180041829,53694,STL-AC
+8,AutoTFT,finetuned,transformers,without_stl,1.0469351326381924,0.8514115038296258,53694,Direct
+9,AutoPatchTST,finetuned,transformers,without_stl,1.0012694665643584,0.8548872449973082,53694,Direct
+10,AutoXGBoost,finetuned,mlforecast,without_stl,1.1144710094032806,0.8833041360994893,53694,Direct
+11,AutoLSTM,finetuned,neuralforecast,stl_model_all_components,1.0641596656566419,0.9101891182286563,53694,STL-AC
+12,AutoRandomForest,finetuned,mlforecast,without_stl,1.1989332013182192,0.914929738034417,53694,Direct

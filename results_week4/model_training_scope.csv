@@ -1,6 +1,0 @@
-family,models,training_scope,what_is_trained,with_mstl_component_scope
-baseline,seasonal_naive,local rule-based,No fitted cross-series model; each series is forecast from its own seasonal history.,not applicable
-statistical,"auto_arima, auto_sarima, auto_ets",local,StatsForecast fits a separate statistical model for each unique_id.,MSTL decomposition and seasonal-naive seasonal component are local per series; adjusted component is also modeled locally.
-mlforecast,"auto_rf, auto_lr, auto_ridge, auto_xgb",global panel,MLForecast builds lag/date features and trains one supervised model across all selected series in the dataset-frequency experiment.,MSTL decomposition and seasonal component are local per series; adjusted component model is global across selected series.
-neuralforecast,"auto_nlinear, auto_nhits, auto_lstm, auto_tft",global panel,NeuralForecast trains neural models on the full selected-series panel for the dataset-frequency experiment.,MSTL decomposition and seasonal component are local per series; adjusted component model is global across selected series.
-transformer,auto_patchtst,global panel,PatchTST is trained on the full selected-series panel for the dataset-frequency experiment.,MSTL decomposition and seasonal component are local per series; adjusted component model is global across selected series.

@@ -1,0 +1,339 @@
+%% BioMed_Central_Bib_Style_v1.01
+
+\begin{thebibliography}{21}
+% BibTex style file: bmc-mathphys.bst (version 2.1), 2014-07-24
+\ifx \bisbn   \undefined \def \bisbn  #1{ISBN #1}\fi
+\ifx \binits  \undefined \def \binits#1{#1}\fi
+\ifx \bauthor  \undefined \def \bauthor#1{#1}\fi
+\ifx \batitle  \undefined \def \batitle#1{#1}\fi
+\ifx \bjtitle  \undefined \def \bjtitle#1{#1}\fi
+\ifx \bvolume  \undefined \def \bvolume#1{\textbf{#1}}\fi
+\ifx \byear  \undefined \def \byear#1{#1}\fi
+\ifx \bissue  \undefined \def \bissue#1{#1}\fi
+\ifx \bfpage  \undefined \def \bfpage#1{#1}\fi
+\ifx \blpage  \undefined \def \blpage #1{#1}\fi
+\ifx \burl  \undefined \def \burl#1{\textsf{#1}}\fi
+\ifx \doiurl  \undefined \def \doiurl#1{\url{https://doi.org/#1}}\fi
+\ifx \betal  \undefined \def \betal{\textit{et al.}}\fi
+\ifx \binstitute  \undefined \def \binstitute#1{#1}\fi
+\ifx \binstitutionaled  \undefined \def \binstitutionaled#1{#1}\fi
+\ifx \bctitle  \undefined \def \bctitle#1{#1}\fi
+\ifx \beditor  \undefined \def \beditor#1{#1}\fi
+\ifx \bpublisher  \undefined \def \bpublisher#1{#1}\fi
+\ifx \bbtitle  \undefined \def \bbtitle#1{#1}\fi
+\ifx \bedition  \undefined \def \bedition#1{#1}\fi
+\ifx \bseriesno  \undefined \def \bseriesno#1{#1}\fi
+\ifx \blocation  \undefined \def \blocation#1{#1}\fi
+\ifx \bsertitle  \undefined \def \bsertitle#1{#1}\fi
+\ifx \bsnm \undefined \def \bsnm#1{#1}\fi
+\ifx \bsuffix \undefined \def \bsuffix#1{#1}\fi
+\ifx \bparticle \undefined \def \bparticle#1{#1}\fi
+\ifx \barticle \undefined \def \barticle#1{#1}\fi
+\bibcommenthead
+\ifx \bconfdate \undefined \def \bconfdate #1{#1}\fi
+\ifx \botherref \undefined \def \botherref #1{#1}\fi
+\ifx \url \undefined \def \url#1{\textsf{#1}}\fi
+\ifx \bchapter \undefined \def \bchapter#1{#1}\fi
+\ifx \bbook \undefined \def \bbook#1{#1}\fi
+\ifx \bcomment \undefined \def \bcomment#1{#1}\fi
+\ifx \oauthor \undefined \def \oauthor#1{#1}\fi
+\ifx \citeauthoryear \undefined \def \citeauthoryear#1{#1}\fi
+\ifx \endbibitem  \undefined \def \endbibitem {}\fi
+\ifx \bconflocation  \undefined \def \bconflocation#1{#1}\fi
+\ifx \arxivurl  \undefined \def \arxivurl#1{\textsf{#1}}\fi
+\csname PreBibitemsHook\endcsname
+
+%%% 1
+\bibitem[\protect\citeauthoryear{Makridakis and Hibon}{2000}]{makridakis2000m3}
+\begin{barticle}
+\bauthor{\bsnm{Makridakis}, \binits{S.}},
+\bauthor{\bsnm{Hibon}, \binits{M.}}:
+\batitle{The {M3-Competition}: Results, conclusions and implications}.
+\bjtitle{International Journal of Forecasting}
+\bvolume{16}(\bissue{4}),
+\bfpage{451}--\blpage{476}
+(\byear{2000})
+\end{barticle}
+\endbibitem
+
+%%% 2
+\bibitem[\protect\citeauthoryear{Makridakis et~al.}{2020}]{makridakis2020m4}
+\begin{barticle}
+\bauthor{\bsnm{Makridakis}, \binits{S.}},
+\bauthor{\bsnm{Spiliotis}, \binits{E.}},
+\bauthor{\bsnm{Assimakopoulos}, \binits{V.}}:
+\batitle{The {M4} competition: 100{,}000 time series and 61 forecasting
+  methods}.
+\bjtitle{International Journal of Forecasting}
+\bvolume{36}(\bissue{1}),
+\bfpage{54}--\blpage{74}
+(\byear{2020})
+\end{barticle}
+\endbibitem
+
+%%% 3
+\bibitem[\protect\citeauthoryear{D'Agostino}{1971}]{dagostino1971}
+\begin{barticle}
+\bauthor{\bsnm{D'Agostino}, \binits{R.B.}}:
+\batitle{An omnibus test of normality for moderate and large size samples}.
+\bjtitle{Biometrika}
+\bvolume{58}(\bissue{2}),
+\bfpage{341}--\blpage{348}
+(\byear{1971})
+\end{barticle}
+\endbibitem
+
+%%% 4
+\bibitem[\protect\citeauthoryear{Hoerl and Kennard}{1970}]{hoerl1970ridge}
+\begin{barticle}
+\bauthor{\bsnm{Hoerl}, \binits{A.E.}},
+\bauthor{\bsnm{Kennard}, \binits{R.W.}}:
+\batitle{Ridge regression: Biased estimation for nonorthogonal problems}.
+\bjtitle{Technometrics}
+\bvolume{12}(\bissue{1}),
+\bfpage{55}--\blpage{67}
+(\byear{1970})
+\end{barticle}
+\endbibitem
+
+%%% 5
+\bibitem[\protect\citeauthoryear{Breiman}{2001}]{breiman2001random}
+\begin{barticle}
+\bauthor{\bsnm{Breiman}, \binits{L.}}:
+\batitle{Random forests}.
+\bjtitle{Machine Learning}
+\bvolume{45}(\bissue{1}),
+\bfpage{5}--\blpage{32}
+(\byear{2001})
+\end{barticle}
+\endbibitem
+
+%%% 6
+\bibitem[\protect\citeauthoryear{Pincus}{2016}]{spectral_entropy_ref}
+\begin{barticle}
+\bauthor{\bsnm{Pincus}, \binits{S.M.}}:
+\batitle{Measuring complexity and predictability of time series with flexible
+  multiscale entropy for sensor networks}.
+\bjtitle{Sensors}
+\bvolume{16}(\bissue{6}),
+\bfpage{783}
+(\byear{2016})
+\end{barticle}
+\endbibitem
+
+%%% 7
+\bibitem[\protect\citeauthoryear{Killick et~al.}{2012}]{killick2012}
+\begin{barticle}
+\bauthor{\bsnm{Killick}, \binits{R.}},
+\bauthor{\bsnm{Fearnhead}, \binits{P.}},
+\bauthor{\bsnm{Eckley}, \binits{I.A.}}:
+\batitle{Optimal detection of changepoints with a linear computational cost}.
+\bjtitle{Journal of the American Statistical Association}
+\bvolume{107}(\bissue{500}),
+\bfpage{1590}--\blpage{1598}
+(\byear{2012})
+\end{barticle}
+\endbibitem
+
+%%% 8
+\bibitem[\protect\citeauthoryear{Engle}{1982}]{engle1982arch}
+\begin{barticle}
+\bauthor{\bsnm{Engle}, \binits{R.F.}}:
+\batitle{Autoregressive conditional heteroscedasticity with estimates of the
+  variance of {United Kingdom} inflation}.
+\bjtitle{Econometrica}
+\bvolume{50}(\bissue{4}),
+\bfpage{987}--\blpage{1007}
+(\byear{1982})
+\end{barticle}
+\endbibitem
+
+%%% 9
+\bibitem[\protect\citeauthoryear{Cleveland et~al.}{1990}]{cleveland1990stl}
+\begin{barticle}
+\bauthor{\bsnm{Cleveland}, \binits{R.B.}},
+\bauthor{\bsnm{Cleveland}, \binits{W.S.}},
+\bauthor{\bsnm{McRae}, \binits{J.E.}},
+\bauthor{\bsnm{Terpenning}, \binits{I.}}:
+\batitle{{STL}: A seasonal-trend decomposition procedure based on loess}.
+\bjtitle{Journal of Official Statistics}
+\bvolume{6}(\bissue{1}),
+\bfpage{3}--\blpage{73}
+(\byear{1990})
+\end{barticle}
+\endbibitem
+
+%%% 10
+\bibitem[\protect\citeauthoryear{Seabold and Perktold}{2010}]{seabold2010}
+\begin{bchapter}
+\bauthor{\bsnm{Seabold}, \binits{S.}},
+\bauthor{\bsnm{Perktold}, \binits{J.}}:
+\bctitle{Statsmodels: Econometric and statistical modeling with {Python}}.
+In: \bbtitle{9th Python in Science Conference},
+pp. \bfpage{92}--\blpage{96}
+(\byear{2010})
+\end{bchapter}
+\endbibitem
+
+%%% 11
+\bibitem[\protect\citeauthoryear{Hyndman and
+  Khandakar}{2008}]{hyndman2008automatic}
+\begin{barticle}
+\bauthor{\bsnm{Hyndman}, \binits{R.J.}},
+\bauthor{\bsnm{Khandakar}, \binits{Y.}}:
+\batitle{Automatic time series forecasting: The \texttt{forecast} package for
+  {R}}.
+\bjtitle{Journal of Statistical Software}
+\bvolume{27}(\bissue{3}),
+\bfpage{1}--\blpage{22}
+(\byear{2008})
+\end{barticle}
+\endbibitem
+
+%%% 12
+\bibitem[\protect\citeauthoryear{Hyndman et~al.}{2008}]{hyndman2008exponential}
+\begin{bbook}
+\bauthor{\bsnm{Hyndman}, \binits{R.J.}},
+\bauthor{\bsnm{Koehler}, \binits{A.B.}},
+\bauthor{\bsnm{Ord}, \binits{J.K.}},
+\bauthor{\bsnm{Snyder}, \binits{R.D.}}:
+\bbtitle{Forecasting with Exponential Smoothing: The State Space Approach}.
+\bpublisher{Springer}, \blocation{???}
+(\byear{2008})
+\end{bbook}
+\endbibitem
+
+%%% 13
+\bibitem[\protect\citeauthoryear{Olivares
+  et~al.}{2022}]{olivares2022statsforecast}
+\begin{botherref}
+\oauthor{\bsnm{Olivares}, \binits{K.G.}},
+\oauthor{\bsnm{Challu}, \binits{C.}},
+\oauthor{\bsnm{Garza}, \binits{F.}},
+\oauthor{\bsnm{Mergenthaler}, \binits{M.}},
+\oauthor{\bsnm{Nixtla}}:
+statsforecast: Lightning fast forecasting with statistical and econometric
+  models.
+arXiv preprint arXiv:2207.03175
+(2022)
+\end{botherref}
+\endbibitem
+
+%%% 14
+\bibitem[\protect\citeauthoryear{Chen and Guestrin}{2016}]{chen2016xgboost}
+\begin{bchapter}
+\bauthor{\bsnm{Chen}, \binits{T.}},
+\bauthor{\bsnm{Guestrin}, \binits{C.}}:
+\bctitle{{XGBoost}: A scalable tree boosting system}.
+In: \bbtitle{Proceedings of the 22nd ACM SIGKDD International Conference on
+  Knowledge Discovery and Data Mining},
+pp. \bfpage{785}--\blpage{794}
+(\byear{2016})
+\end{bchapter}
+\endbibitem
+
+%%% 15
+\bibitem[\protect\citeauthoryear{Garza et~al.}{2022}]{garza2022mlforecast}
+\begin{botherref}
+\oauthor{\bsnm{Garza}, \binits{F.}},
+\oauthor{\bsnm{Canseco}, \binits{M.M.}},
+\oauthor{\bsnm{Challú}, \binits{C.}},
+\oauthor{\bsnm{Olivares}, \binits{K.G.}}:
+Mlforecast: Scalable machine learning for time series forecasting.
+arXiv preprint arXiv:2207.03175
+(2022)
+\end{botherref}
+\endbibitem
+
+%%% 16
+\bibitem[\protect\citeauthoryear{Akiba et~al.}{2019}]{akiba2019optuna}
+\begin{bchapter}
+\bauthor{\bsnm{Akiba}, \binits{T.}},
+\bauthor{\bsnm{Sano}, \binits{S.}},
+\bauthor{\bsnm{Yanase}, \binits{T.}},
+\bauthor{\bsnm{Ohta}, \binits{T.}},
+\bauthor{\bsnm{Koyama}, \binits{M.}}:
+\bctitle{Optuna: A next-generation hyperparameter optimization framework}.
+In: \bbtitle{Proceedings of the 25th ACM SIGKDD International Conference on
+  Knowledge Discovery and Data Mining},
+pp. \bfpage{2623}--\blpage{2631}
+(\byear{2019})
+\end{bchapter}
+\endbibitem
+
+%%% 17
+\bibitem[\protect\citeauthoryear{Challu et~al.}{2023}]{challu2023nhits}
+\begin{bchapter}
+\bauthor{\bsnm{Challu}, \binits{C.}},
+\bauthor{\bsnm{Olivares}, \binits{K.G.}},
+\bauthor{\bsnm{Oreshkin}, \binits{B.N.}},
+\bauthor{\bsnm{Garza}, \binits{F.}},
+\bauthor{\bsnm{Mergenthaler-Canseco}, \binits{M.}},
+\bauthor{\bsnm{Dubrawski}, \binits{A.}}:
+\bctitle{{N-HiTS}: Neural hierarchical interpolation for time series
+  forecasting}.
+In: \bbtitle{Proceedings of the AAAI Conference on Artificial Intelligence},
+vol. \bseriesno{37},
+pp. \bfpage{6989}--\blpage{6997}
+(\byear{2023})
+\end{bchapter}
+\endbibitem
+
+%%% 18
+\bibitem[\protect\citeauthoryear{Olivares
+  et~al.}{2023}]{olivares2023neuralforecast}
+\begin{botherref}
+\oauthor{\bsnm{Olivares}, \binits{K.G.}},
+\oauthor{\bsnm{Challu}, \binits{C.}},
+\oauthor{\bsnm{Garza}, \binits{F.}},
+\oauthor{\bsnm{Canseco}, \binits{M.M.}},
+\oauthor{\bsnm{Dubrawski}, \binits{A.}}:
+Neuralforecast: User friendly state-of-the-art neural forecasting models.
+arXiv preprint arXiv:2207.03175
+(2023)
+\end{botherref}
+\endbibitem
+
+%%% 19
+\bibitem[\protect\citeauthoryear{Lim et~al.}{2021}]{lim2021tft}
+\begin{barticle}
+\bauthor{\bsnm{Lim}, \binits{B.}},
+\bauthor{\bsnm{Ar{\i}k}, \binits{S.{\"O}.}},
+\bauthor{\bsnm{Loeff}, \binits{N.}},
+\bauthor{\bsnm{Pfister}, \binits{T.}}:
+\batitle{Temporal fusion transformers for interpretable multi-horizon time
+  series forecasting}.
+\bjtitle{International Journal of Forecasting}
+\bvolume{37}(\bissue{4}),
+\bfpage{1748}--\blpage{1764}
+(\byear{2021})
+\end{barticle}
+\endbibitem
+
+%%% 20
+\bibitem[\protect\citeauthoryear{Nie et~al.}{2023}]{nie2022patchtst}
+\begin{bchapter}
+\bauthor{\bsnm{Nie}, \binits{Y.}},
+\bauthor{\bsnm{H.~Nguyen}, \binits{N.}},
+\bauthor{\bsnm{Sinthong}, \binits{P.}},
+\bauthor{\bsnm{Kalagnanam}, \binits{J.}}:
+\bctitle{A time series is worth 64 words: Long-term forecasting with
+  transformers}.
+In: \bbtitle{International Conference on Learning Representations}
+(\byear{2023})
+\end{bchapter}
+\endbibitem
+
+%%% 21
+\bibitem[\protect\citeauthoryear{Tashman}{2000}]{tashman2000}
+\begin{barticle}
+\bauthor{\bsnm{Tashman}, \binits{L.J.}}:
+\batitle{Out-of-sample tests of forecasting accuracy: An analysis and review}.
+\bjtitle{International Journal of Forecasting}
+\bvolume{16}(\bissue{4}),
+\bfpage{437}--\blpage{450}
+(\byear{2000})
+\end{barticle}
+\endbibitem
+
+\end{thebibliography}

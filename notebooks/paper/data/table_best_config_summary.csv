@@ -1,0 +1,13 @@
+model,Non-normality,Nonlinearity,Spectral entropy,Evolv. seasonality,Structural break,ARCH/volatility
+AutoXGBoost,Direct/FT ✓,Direct/FT ✓,Direct/FT ✓,Direct/FT ✓,Direct/FT ✓,Direct/FT ✓
+AutoLSTM,STL-AC/FT ✓,STL-AC/FT ✓,Direct/FT ✓,STL-AC/FT ✓,STL-AC/FT ✓,STL-AC/FT ✓
+AutoRandomForest,Direct/FT ✓,Direct/FT ~,Direct/FT ~,Direct/FT ~,Direct/FT ~,Direct/FT ~
+AutoNHITS,Direct/FT ✓,Direct/FT ✓,Direct/FT ✓,Direct/FT ✓,Direct/FT ✓,Direct/FT ✓
+AutoTFT,Direct/FT ✓,Direct/FT ✓,Direct/FT ✓,Direct/FT ✓,Direct/FT ✓,Direct/FT ✓
+AutoPatchTST,Direct/FT ✓,Direct/FT ✓,Direct/FT ✓,Direct/FT ✓,Direct/FT ✓,Direct/FT ✓
+AutoRidge,STL-AC/GL ✓,STL-AC/GL ✓,STL-AC/GL ✓,STL-AC/GL ✓,STL-AC/GL ✓,STL-AC/GL ✓
+AutoLinearRegression,STL-AC/GL ✓,STL-AC/GL ✓,STL-AC/GL ✓,STL-AC/GL ✓,STL-AC/GL ✓,STL-AC/GL ✓
+AutoNLinear,STL-AC/GL ✓,STL-AC/GL ✓,STL-AC/GL ✓,STL-AC/GL ✓,STL-AC/GL ✓,STL-AC/GL ✓
+AutoARIMA,Direct/GL ~,Direct/GL ~,Direct/GL ~,Direct/GL ~,Direct/GL ~,Direct/GL ~
+AutoETS,Direct/GL ~,Direct/GL ~,Direct/GL ~,Direct/GL ~,Direct/GL ~,Direct/GL ~
+AutoSARIMA,Direct/GL ~,Direct/GL ~,Direct/GL ~,Direct/GL ~,Direct/GL ~,Direct/GL ~

@@ -1,0 +1,721 @@
+%% Springer Nature journal template -- sn-jnl (Version 3.1, December 2024)
+%% Reference style: Math and Physical Sciences Numbered
+\documentclass[pdflatex,sn-mathphys-num]{sn-jnl}
+
+%%%% Packages
+\usepackage{graphicx}
+\usepackage{multirow}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{amsthm}
+\usepackage{booktabs}
+\usepackage{xcolor}
+\usepackage[title]{appendix}
+\usepackage{textcomp}
+
+%%%% Theorem styles
+\theoremstyle{thmstyleone}
+\newtheorem{theorem}{Theorem}
+\newtheorem{proposition}[theorem]{Proposition}
+
+\theoremstyle{thmstyletwo}
+\newtheorem{example}{Example}
+\newtheorem{remark}{Remark}
+
+\theoremstyle{thmstylethree}
+\newtheorem{definition}{Definition}
+
+\raggedbottom
+
+\begin{document}
+
+\title[Feature-Driven Meta-Learning for Decomposition Strategy Selection]{%
+  When Does Seasonal Decomposition Help?\\
+  A Feature-Driven Meta-Learning Study for Time Series Forecasting}
+
+\author*[1]{\fnm{Diogo} \sur{Costa}}\email{diogocosta1104@gmail.com}
+
+\affil*[1]{%
+  \orgdiv{Faculty of Engineering},
+  \orgname{University of Porto},
+  \orgaddress{%
+    \street{Rua Dr.\ Roberto Frias},
+    \city{Porto},
+    \postcode{4200-465},
+    \country{Portugal}}}
+
+\abstract{%
+% TODO: Write after experiments are complete.
+}
+
+\keywords{Time series forecasting, Seasonal decomposition, STL,
+  Meta-learning, Feature engineering, AutoML, Global forecasting models}
+
+\maketitle
+
+% ---------------------------------------------------------------------------
+\section{Introduction}\label{sec:intro}
+% TODO
+% ---------------------------------------------------------------------------
+
+% ---------------------------------------------------------------------------
+\section{Related Work}\label{sec:related}
+% TODO
+% ---------------------------------------------------------------------------
+
+% ---------------------------------------------------------------------------
+\section{Methodology}\label{sec:methodology}
+% ---------------------------------------------------------------------------
+
+\subsection{Problem Formulation}\label{sec:problem}
+
+Let $\mathbf{y} = (y_1, y_2, \ldots, y_T)$ be a univariate time series with
+seasonal period $m$ and forecast horizon $h$.
+Given a set of forecasting methods $\mathcal{M}$ and decomposition strategies
+$\mathcal{D}$, the question is whether observable properties of $\mathbf{y}$ can
+predict which pair $(d, M) \in \mathcal{D} \times \mathcal{M}$ minimises forecast
+error for that series.
+
+To study this, we extract a six-dimensional feature vector $\phi(\mathbf{y})$,
+partition series into tercile groups along each feature dimension,
+train all $(d, M)$ combinations within each group, and compare performance across
+groups. If decomposition is beneficial, this signal should appear as a systematic
+performance difference between feature terciles.
+
+\subsection{Datasets}\label{sec:data}
+
+We use two established benchmarks from the M-Competition series:
+the M3~\cite{makridakis2000m3} and M4~\cite{makridakis2020m4} datasets,
+restricted to monthly and quarterly frequencies.
+Table~\ref{tab:datasets} summarises the resulting collection.
+
+\begin{table}[ht]
+\caption{Dataset summary. Horizon and season length follow the competition
+definitions; series counts reflect the representative sample used for
+benchmarking (see Section~\ref{sec:sampling}).}\label{tab:datasets}
+\begin{tabular}{llccc}
+\toprule
+\textbf{Dataset} & \textbf{Frequency} & \textbf{Season ($m$)} &
+\textbf{Horizon ($h$)} & \textbf{Series} \\
+\midrule
+M3 Monthly    & Monthly   & 12 & 18 & 750 \\
+M4 Monthly    & Monthly   & 12 & 18 & 750 \\
+M3 Quarterly  & Quarterly & 4  & 8  & 750 \\
+M4 Quarterly  & Quarterly & 4  & 8  & 750 \\
+\midrule
+\multicolumn{4}{l}{Total} & 3{,}000 \\
+\botrule
+\end{tabular}
+\end{table}
+
+\subsubsection{Representative Sampling.}\label{sec:sampling}
+
+The M3 and M4 pools each contain several thousand series per frequency, so we
+draw 750 series per source dataset using stratified quantile sampling.
+Series are ranked by each feature $\phi_k$ and divided into $S = 30$ equal-count
+strata; the 750-series quota is distributed across strata proportionally and filled
+by draws without replacement.
+This ensures the sample reproduces the marginal feature distribution of the full pool.
+A fixed random seed makes the sampling deterministic.
+
+\subsection{Time Series Feature Extraction}\label{sec:features}
+
+Six features characterise each series.
+Where noted, they operate on STL residuals (Section~\ref{sec:stl}) to
+focus on intrinsic series behaviour rather than removable seasonal structure.
+All features are computed from the training observations only, with no access
+to the test period.
+
+\paragraph{Non-normality ($\phi_1$).}
+Residuals $r_t$ from the STL fit are standardised as
+$z_t = (r_t - \tilde{r}) / (1.4826 \cdot \mathrm{MAD}(r) + \varepsilon)$,
+where $\tilde{r}$ is the median.
+The D'Agostino--Pearson omnibus test~\cite{dagostino1971} is applied to
+$\{z_t\}$, and its $p$-value is converted to a log-scale score:
+\begin{equation}
+  \phi_1 = \min\!\bigl(-\log_{10}(p_1 + 10^{-12}),\; 12\bigr).
+  \label{eq:phi1}
+\end{equation}
+High values indicate strong departure from Gaussian residuals.
+
+\paragraph{Nonlinearity ($\phi_2$).}
+We assess whether lagged history contains nonlinear predictive structure by
+comparing a linear and a nonlinear autoregressive model.
+Let $\ell = \min(m, 12)$ be the embedding dimension.
+We construct lag-feature matrices from $\{(y_{t-\ell},\ldots,y_{t-1}, y_t)\}$
+and split the resulting dataset at three chronological split points
+(55\%, 70\%, and 85\% of the series length) to obtain multiple train/test folds.
+On each fold we fit a Ridge regression~\cite{hoerl1970ridge} ($\alpha = 1$) and
+a Random Forest~\cite{breiman2001random} (40 trees, max depth 4).
+The feature is the mean relative improvement of the nonlinear model:
+\begin{equation}
+  \phi_2 = \min\!\left(
+    \max\!\left(0,\;
+    \frac{\overline{\mathrm{MAE}}_{\mathrm{linear}} -
+           \overline{\mathrm{MAE}}_{\mathrm{RF}}}
+         {\overline{\mathrm{MAE}}_{\mathrm{linear}} + 10^{-8}}
+    \right),\; 2
+  \right),
+  \label{eq:phi2}
+\end{equation}
+where $\overline{\mathrm{MAE}}$ denotes the mean across folds.
+A value of zero indicates the Random Forest offers no improvement over ridge
+regression; this is structurally common in linear datasets, as discussed in
+Section~\ref{sec:nonlin_edge}.
+
+\paragraph{Spectral entropy ($\phi_3$).}
+We compute the power spectral density of the demeaned series via a periodogram
+and derive its normalised Shannon entropy:
+\begin{equation}
+  \phi_3 = -\frac{\displaystyle\sum_{k} p_k \ln p_k}{\ln K}
+          \;\in [0, 1],
+  \label{eq:phi3}
+\end{equation}
+where $p_k = \hat{S}(f_k) / \sum_j \hat{S}(f_j)$ are the normalised spectral
+weights and $K$ is the number of non-zero frequencies.
+Low values indicate a spectrum concentrated at a few dominant frequencies
+(strong, regular periodicity); high values indicate a diffuse, unpredictable
+spectrum~\cite{spectral_entropy_ref}.
+
+\paragraph{Evolving seasonality ($\phi_4$).}
+To detect non-stationary seasonal behaviour, we compute the seasonal strength
+(Equation~\ref{eq:seasstrength}) in rolling windows of length
+$\max(36, 3m)$ for monthly and $\max(16, 4m)$ for quarterly series,
+advancing by $\lfloor m/2 \rfloor$ observations per step.
+The seasonal strength in each window is
+\begin{equation}
+  F_s^{(w)} = \max\!\left(0,\; 1 - \frac{\mathrm{Var}(R^{(w)})}
+                                         {\mathrm{Var}(S^{(w)} + R^{(w)})}\right),
+  \label{eq:seasstrength}
+\end{equation}
+where $S^{(w)}$ and $R^{(w)}$ are the STL seasonal and residual components in
+window $w$.
+The feature is the standard deviation of the sequence $\{F_s^{(w)}\}$:
+a high value indicates that seasonal strength changes substantially over time.
+
+\paragraph{Structural break strength ($\phi_5$).}
+We detect level shifts in the nonseasonal component $T_t + R_t$ using the
+PELT algorithm~\cite{killick2012} with an RBF cost function and a
+$\log(n)$-proportional penalty.
+Let $\mathcal{B}$ be the set of detected breakpoints in the central 60\% of the
+series (to exclude boundary effects).
+For each candidate break $b \in \mathcal{B}$, the mean-shift contrast is
+\begin{equation}
+  \Delta_b = \frac{|\bar{x}_{<b} - \bar{x}_{\geq b}|}
+                  {1.4826 \cdot \mathrm{MAD}(T + R) + \varepsilon},
+  \label{eq:breakcontrast}
+\end{equation}
+and $\phi_5 = \min(\max_b \Delta_b,\; 20)$.
+This measures the magnitude of the largest structural shift relative to
+the scale of the nonseasonal component.
+
+\paragraph{Conditional heteroscedasticity ($\phi_6$).}
+We test for ARCH effects~\cite{engle1982arch} in the normalised STL residuals
+$\{z_t\}$ using Engle's LM test with lag order $\min(12, \lfloor n/5 \rfloor)$
+and return
+\begin{equation}
+  \phi_6 = \min\!\bigl(-\log_{10}(p_6 + 10^{-12}),\; 12\bigr),
+  \label{eq:phi6}
+\end{equation}
+where $p_6$ is the LM test $p$-value.
+High values indicate serially correlated residual variance (volatility
+clustering).
+
+\subsubsection{Feature Bucket Assignment.}\label{sec:buckets}
+
+For each feature $\phi_k$ and frequency, all selected series are jointly ranked
+by their feature value and assigned to tercile buckets: \textit{Low} (bottom
+third), \textit{Medium} (middle third), and \textit{High} (top third).
+The bucket boundaries are the $33.3^{\text{rd}}$ and $66.7^{\text{th}}$
+percentiles computed across both M3 and M4 series combined.
+This partitioning drives the feature-conditioned finetuning strategy described
+in Section~\ref{sec:finetuning}.
+
+\subsection{STL Decomposition Framework}\label{sec:stl}
+
+Seasonal-Trend decomposition using Loess (STL)~\cite{cleveland1990stl}
+factorises a time series as
+\begin{equation}
+  y_t = T_t + S_t + R_t,
+  \label{eq:stl}
+\end{equation}
+where $T_t$ is a locally smooth trend, $S_t$ is a periodic seasonal component
+(constrained to be approximately zero-mean within each period), and $R_t$ is
+the remainder.
+We use the robust variant of STL (down-weighting outlier observations during
+the Loess smoothing passes), implemented via \texttt{statsmodels}~\cite{seabold2010}.
+
+We evaluate three strategies for exploiting this decomposition:
+
+\begin{description}
+  \item[\textbf{Direct} (\texttt{without\_stl}).] The forecasting model operates
+    directly on the raw series $\mathbf{y}$. No decomposition is applied.
+
+  \item[\textbf{STL--Seasonal-Naive} (\texttt{stl\_seasonal\_naive}).] The model
+    is trained on the nonseasonal component $N_t = T_t + R_t$, producing a
+    forecast $\hat{N}_{t+1:t+h}$. The seasonal component is extrapolated by
+    repeating the last observed full seasonal cycle:
+    $\hat{S}_{t+j} = S_{t+j-m}$ for $j = 1, \ldots, h$.
+    The final forecast is $\hat{y}_{t+j} = \hat{N}_{t+j} + \hat{S}_{t+j}$.
+
+  \item[\textbf{STL--All-Components} (\texttt{stl\_model\_all\_components}).] Three
+    separate model instances are trained on $T_t$, $S_t$, and $R_t$ respectively,
+    yielding component forecasts $\hat{T}$, $\hat{S}$, and $\hat{R}$.
+    The final forecast is the sum:
+    \begin{equation}
+      \hat{y}_{t+j} = \hat{T}_{t+j} + \hat{S}_{t+j} + \hat{R}_{t+j},
+      \quad j = 1, \ldots, h.
+      \label{eq:recompose}
+    \end{equation}
+\end{description}
+
+\subsection{Forecasting Model Families}\label{sec:models}
+
+We benchmark four families across two training paradigms.
+
+\paragraph{Statistical (\textit{per-series}).}
+AutoARIMA~\cite{hyndman2008automatic}, AutoSARIMA (forced $D=1$), and
+AutoETS~\cite{hyndman2008exponential}, all implemented via
+\texttt{statsforecast}~\cite{olivares2022statsforecast}.
+
+\paragraph{Machine learning (\textit{global}).}
+AutoRidge, AutoLinearRegression, AutoXGBoost~\cite{chen2016xgboost}, and
+AutoRandomForest, trained jointly on all cohort series via sliding-window
+lag features (\texttt{MLForecast}~\cite{garza2022mlforecast}, Optuna
+HPO~\cite{akiba2019optuna}, 100 trials).
+
+\paragraph{Neural (\textit{global}).}
+AutoNLinear, AutoNHITS~\cite{challu2023nhits}, and AutoLSTM
+(\texttt{NeuralForecast}~\cite{olivares2023neuralforecast}).
+
+\paragraph{Transformers (\textit{global}).}
+AutoTFT~\cite{lim2021tft} and AutoPatchTST~\cite{nie2022patchtst}
+(\texttt{NeuralForecast}).
+
+\subsection{Bucket-Specialised Training}\label{sec:finetuning}
+
+For global model families (ML, Neural, Transformers), we investigate whether
+\emph{regime-specialised} global models outperform a single global model trained
+on all 750 series.
+The hypothesis is that series sharing the same feature-tercile level exhibit
+sufficiently homogeneous dynamics to benefit from a dedicated model.
+
+For each task configuration (feature $\times$ frequency $\times$ decomposition
+$\times$ model), three independent global models are trained---one per tercile
+bucket (\textit{Low}, \textit{Medium}, \textit{High})---each using
+\emph{exclusively} the $\approx\!250$ series in its bucket, and evaluated
+\emph{exclusively} on the test series from the same bucket.
+Performance is measured as the finetuning delta
+$\Delta_{\mathrm{FT}} = \mathrm{RelNaive}^{(10)}_{\mathrm{global}} -
+\mathrm{RelNaive}^{(10)}_{\mathrm{bucket}}$ (positive = specialised model wins).
+The global model (all 750 series, no bucket restriction) serves as the
+comparison baseline throughout.
+
+Statistical models are excluded as they fit independently per series and are
+unaffected by the training-pool composition.
+For global families, each (decomposition, model, feature) configuration is
+evaluated twice: once with all 750 series as the global baseline, and once per
+tercile bucket under the specialised condition.
+
+\subsection{Evaluation Protocol}\label{sec:evaluation}
+
+\subsubsection{Cross-Validation.}
+We use rolling-origin cross-validation~\cite{tashman2000} with $W = 3$ windows
+per series, advancing by $h$ observations per window.
+For each series $i$ and window $w$, we define a training set ending at cutoff
+$c_i^{(w)}$ and a test set of exactly $h$ future observations.
+
+\subsubsection{Metric.}
+The primary metric is the \emph{Relative Naive} (RelNaive), defined as
+\begin{equation}
+  \mathrm{RelNaive} =
+    \frac{\mathrm{MAE}(\mathbf{y},\,\hat{\mathbf{y}})}
+         {\mathrm{MAE}(\mathbf{y},\,\hat{\mathbf{y}}^{\mathrm{naive}})},
+  \label{eq:relnai}
+\end{equation}
+where $\hat{\mathbf{y}}^{\mathrm{naive}}$ is the seasonal naive forecast
+($\hat{y}_{t+j}^{\mathrm{naive}} = y_{t+j-m}$, $j = 1, \ldots, h$).
+A value below 1 indicates the model outperforms the seasonal naive baseline.
+We report both unclipped ($\mathrm{RelNaive}$) and clipped
+($\mathrm{RelNaive}^{(10)}$, capped at 10) variants; the latter reduces the
+influence of catastrophic failures on aggregate rankings.
+Aggregate statistics are computed as the mean over all series and windows within
+each reporting group (feature, decomposition method, model family, training scope).
+
+The \emph{STL delta} $\Delta_{\mathrm{STL}}$ measures the improvement from
+applying STL decomposition relative to the Direct strategy:
+\begin{equation}
+  \Delta_{\mathrm{STL}} =
+    \mathrm{RelNaive}^{(10)}_{\mathrm{Direct}} -
+    \mathrm{RelNaive}^{(10)}_{\mathrm{STL}},
+  \label{eq:stl_delta}
+\end{equation}
+so a positive value indicates that STL decomposition reduces error.
+The \emph{specialisation delta} $\Delta_{\mathrm{FT}}$ measures the improvement
+from training a bucket-specialised model over the global baseline:
+\begin{equation}
+  \Delta_{\mathrm{FT}} =
+    \mathrm{RelNaive}^{(10)}_{\mathrm{global}} -
+    \mathrm{RelNaive}^{(10)}_{\mathrm{bucket}},
+  \label{eq:ft_delta}
+\end{equation}
+with a positive value indicating that regime-specialised training outperforms
+the global model on the same series.
+
+Statistical significance of aggregate deltas is assessed with the
+Wilcoxon signed-rank test~\cite{wilcoxon1945} applied at the series level,
+with $p$-values corrected for multiple comparisons using the Holm--Bonferroni
+method~\cite{holm1979}.
+
+% ---------------------------------------------------------------------------
+\section{Results}\label{sec:results}
+% ---------------------------------------------------------------------------
+
+% ---------------------------------------------------------------------------
+\subsection{Global Baseline Performance}\label{sec:baseline}
+% ---------------------------------------------------------------------------
+
+All 3{,}000 series (1{,}500 monthly, 1{,}500 quarterly) are evaluated over three
+rolling cross-validation windows.
+Table~\ref{tab:top10} ranks the global model configurations by mean
+$\mathrm{RelNaive}^{(10)}$ (all series, no bucket restriction).
+\textbf{AutoETS with Direct (no decomposition)} is the best single configuration
+(mean $0.888$, median $0.791$), and the only one to beat the na\"ive forecast at
+the mean level without preprocessing.
+The next nine are dominated by STL-SN paired with statistical or transformer
+models.
+
+\begin{table}[ht]
+\caption{Top-10 global model configurations by mean $\mathrm{RelNaive}^{(10)}$
+(lower is better).
+Direct = no decomposition; STL-SN = STL--Seasonal-Na\"ive;
+STL-AC = STL--All-Components.}\label{tab:top10}
+\begin{tabular*}{\textwidth}{@{\extracolsep\fill}llllcc}
+\toprule
+Rank & Family & Model & Decomp.\ & Mean & Median \\
+\midrule
+1  & Statistical  & AutoETS               & Direct  & 0.888 & 0.791 \\
+2  & Statistical  & AutoARIMA             & STL-SN  & 0.930 & 0.887 \\
+3  & Neural       & AutoNLinear           & STL-SN  & 0.931 & 0.889 \\
+4  & Statistical  & AutoSARIMA            & STL-SN  & 0.931 & 0.889 \\
+5  & ML           & AutoLinearRegression  & STL-SN  & 0.933 & 0.893 \\
+6  & ML           & AutoRidge             & STL-SN  & 0.933 & 0.889 \\
+7  & Transformer  & AutoPatchTST          & STL-SN  & 0.933 & 0.891 \\
+8  & Statistical  & AutoETS               & STL-SN  & 0.935 & 0.918 \\
+9  & Transformer  & AutoPatchTST          & STL-AC  & 0.936 & 0.826 \\
+10 & Transformer  & AutoTFT               & STL-SN  & 0.936 & 0.919 \\
+\botrule
+\end{tabular*}
+\end{table}
+
+A persistent divergence between mean and median runs throughout the study:
+under STL decomposition the ML and Neural families have mean
+$\mathrm{RelNaive}^{(10)} > 1$ (1.12--1.19) while their medians remain near or
+below 1.
+A heavy right tail of catastrophic failures on a minority of series pulls the
+mean above the na\"ive baseline even when most series benefit.
+Both statistics are therefore reported throughout.
+
+% ---------------------------------------------------------------------------
+\subsection{Effect of STL Decomposition}\label{sec:stl_results}
+% ---------------------------------------------------------------------------
+
+Table~\ref{tab:stl_delta} reports $\Delta_{\mathrm{STL}}$ for the global model.
+Positive values indicate STL reduces error relative to Direct.
+
+\begin{table}[ht]
+\caption{STL delta $\Delta_{\mathrm{STL}}$ by decomposition and model family
+(global model; mean and median over all series and windows;
+win rate = fraction of series where STL helps).}\label{tab:stl_delta}
+\begin{tabular*}{\textwidth}{@{\extracolsep\fill}llccc}
+\toprule
+Decomposition & Family & Mean $\Delta$ & Median $\Delta$ & Win Rate \\
+\midrule
+STL-AC & Transformer  & $+0.039$ & $+0.141$ & $68.5\%$ \\
+STL-SN & Transformer  & $+0.063$ & $+0.091$ & $67.9\%$ \\
+STL-AC & Neural       & $-0.119$ & $+0.063$ & $57.6\%$ \\
+STL-SN & Neural       & $-0.109$ & $+0.027$ & $55.4\%$ \\
+STL-AC & ML           & $-0.191$ & $+0.023$ & $52.5\%$ \\
+STL-SN & ML           & $-0.194$ & $-0.002$ & $49.5\%$ \\
+STL-AC & Statistical  & $-0.028$ & $-0.085$ & $39.8\%$ \\
+STL-SN & Statistical  & $-0.009$ & $-0.109$ & $37.1\%$ \\
+\botrule
+\end{tabular*}
+\end{table}
+
+\paragraph{Transformers} benefit robustly from STL decomposition: both
+STL-SN and STL-AC yield positive mean \emph{and} median deltas, with win
+rates near 68\%.
+The improvement is strongest under STL-AC (median $+0.141$), suggesting that
+training separate global submodels for trend, seasonal, and residual components
+aligns well with PatchTST and TFT inductive biases.
+
+\paragraph{Neural and ML models} show the mean--median divergence at its
+most pronounced.
+For Neural, the median is positive (STL-AC: $+0.063$; STL-SN: $+0.027$) but
+the mean is deeply negative ($-0.119$, $-0.109$): STL helps most series but
+fails badly on those with non-stationary seasonal patterns where the
+decomposition itself is unreliable.
+ML is worse: STL-SN mean $-0.194$, median essentially zero ($-0.002$).
+
+\paragraph{Statistical models} are consistently \emph{harmed} by both
+decomposition strategies (win rates $\approx 38$--$40\%$, negative mean and
+median).
+AutoARIMA, AutoSARIMA, and AutoETS already model trend and seasonality
+internally; applying STL preprocessing introduces redundant transformation and
+additional parameter uncertainty, degrading rather than improving performance.
+
+Frequency effects are marginal: quarterly series show slightly larger median
+gains (STL-AC median $+0.024$ vs.\ $+0.033$ monthly) with no directional
+difference.
+
+% ---------------------------------------------------------------------------
+\subsection{Bucket-Specific Finetuning}\label{sec:ft_results}
+% ---------------------------------------------------------------------------
+
+\subsubsection{Overall Results}\label{sec:ft_overall}
+
+Across 1{,}449{,}738 series-window observations, the specialised models achieve
+median $\Delta_{\mathrm{FT}} = +0.050$, mean $= -0.029$, win rate $= 56.1\%$.
+The mean--median gap mirrors the pattern seen for STL: bucket specialisation
+benefits the majority but fails badly on a tail of series, dragging the mean
+negative.
+
+Medium-bucket series show the most consistent improvement (median $+0.059$,
+win rate $56.8\%$); Low and High are comparable (median $+0.048$ and $+0.046$).
+The Medium advantage reflects that these are the modal-regime series---the
+specialised model is not pulled toward the extremes present in either tail.
+
+\subsubsection{Non-Linear vs.\ Linear Models: A Critical Split}\label{sec:linvnonlin}
+
+The clearest split is between non-linear and linear models:
+
+\begin{table}[ht]
+\caption{Bucket-specific finetuning delta by model type (aggregated over all
+families, buckets, decompositions, and series).}\label{tab:lin_nonlin}
+\begin{tabular}{lccc}
+\toprule
+Model type & Mean $\Delta_{\mathrm{FT}}$ & Median $\Delta_{\mathrm{FT}}$ & Win rate \\
+\midrule
+Non-linear & $+0.082$ & $+0.092$ & $60.1\%$ \\
+Linear     & $-0.251$ & $-0.014$ & $48.1\%$ \\
+\botrule
+\end{tabular}
+\end{table}
+
+\noindent
+\textbf{Non-linear models benefit} because focusing training on $\approx\!250$
+regime-homogeneous series improves generalisation within that regime without
+sacrificing coverage of the full distribution.
+Both mean and median are positive, so the gain is robust.
+
+\noindent
+\textbf{Linear models are harmed}: $\approx\!250$ training points are
+insufficient for stable coefficient estimation, and the bucket-induced
+distribution shift worsens the problem.
+The sub-50\% win rate ($48.1\%$) confirms a directional harm, not noise;
+Section~\ref{sec:significance} verifies significance.
+
+Table~\ref{tab:per_model} gives the per-model breakdown.
+
+\begin{table}[ht]
+\caption{Bucket-specific finetuning delta per model (aggregated over all
+buckets, decompositions, features, and frequencies).
+Models are classified as linear (L) or non-linear (NL).}\label{tab:per_model}
+\begin{tabular*}{\textwidth}{@{\extracolsep\fill}lllccc}
+\toprule
+Family & Model & Type & Mean $\Delta$ & Median $\Delta$ & Win rate \\
+\midrule
+ML          & AutoXGBoost           & NL & $+0.236$ & $+0.187$ & $65.3\%$ \\
+Neural      & AutoLSTM              & NL & $+0.231$ & $+0.162$ & $64.2\%$ \\
+ML          & AutoRandomForest      & NL & $+0.146$ & $+0.155$ & $61.6\%$ \\
+Neural      & AutoNHITS             & NL & $-0.031$ & $+0.076$ & $59.2\%$ \\
+Transformer & AutoTFT               & NL & $-0.076$ & $+0.059$ & $57.5\%$ \\
+Transformer & AutoPatchTST          & NL & $-0.013$ & $+0.014$ & $52.6\%$ \\
+\midrule
+ML          & AutoRidge             & L  & $-0.327$ & $-0.004$ & $49.5\%$ \\
+ML          & AutoLinearRegression  & L  & $-0.327$ & $-0.002$ & $49.7\%$ \\
+Neural      & AutoNLinear           & L  & $-0.099$ & $-0.029$ & $45.1\%$ \\
+\botrule
+\end{tabular*}
+\end{table}
+
+\noindent
+AutoXGBoost and AutoLSTM show the largest gains (median $+0.187$,
+win $65.3\%$; median $+0.162$, win $64.2\%$ respectively), benefiting from
+the focused within-bucket training distribution.
+AutoNHITS and the transformers have positive medians but negative means,
+indicating fat-tailed distributions.
+AutoRidge and AutoLinearRegression suffer the largest harms (mean $\Delta =
+-0.327$), a direct consequence of coefficient instability on small training
+pools.
+\textbf{Bucket specialisation should be restricted to non-linear models.}
+
+\subsubsection{Interaction with STL Decomposition}\label{sec:ft_stl_interact}
+
+Finetuning interacts differently with each decomposition strategy:
+
+\begin{table}[ht]
+\caption{Bucket finetuning delta by decomposition strategy (all non-statistical
+model families and buckets combined).}\label{tab:ft_decomp}
+\begin{tabular}{lccc}
+\toprule
+Decomposition & Mean $\Delta_{\mathrm{FT}}$ & Median $\Delta_{\mathrm{FT}}$ & Win rate \\
+\midrule
+Direct   & $-0.156$ & $+0.108$ & $60.4\%$ \\
+STL-SN   & $+0.044$ & $+0.032$ & $55.6\%$ \\
+STL-AC   & $+0.026$ & $+0.021$ & $52.2\%$ \\
+\botrule
+\end{tabular}
+\end{table}
+
+\noindent
+Direct gives the highest median ($+0.108$) but the worst mean ($-0.156$):
+without seasonal preprocessing, a model trained on $\approx\!250$ series
+overfits to the idiosyncratic structure of its bucket.
+\textbf{STL-SN is the most robust pairing} (mean $+0.044$, median $+0.032$):
+removing seasonality first produces a more stationary target, reducing
+catastrophic failures.
+
+% ---------------------------------------------------------------------------
+\subsection{The Feature Nonlinearity Edge Case}\label{sec:nonlin_edge}
+% ---------------------------------------------------------------------------
+
+The \texttt{feature\_nonlinearity} ($\phi_2$) feature exposes a structural
+limitation of tercile-based bucketing.
+Because $\phi_2$ is zero-floored (Equation~\ref{eq:phi2}), the M3/M4 series
+accumulate at exactly zero: 81.8\% monthly, 92.8\% quarterly.
+Both tercile boundaries therefore coincide at $q_{1/3} = q_{2/3} = 0$, so all
+zero-valued series fall into Low and all non-zero series into High, leaving the
+Medium bucket empty (Table~\ref{tab:nonlin_buckets}).
+
+\begin{table}[ht]
+\caption{Bucket sizes for \texttt{feature\_nonlinearity} ($\phi_2$).
+$q_{1/3} = q_{2/3} = 0$ forces binary Low/High stratification.}\label{tab:nonlin_buckets}
+\begin{tabular}{lcccc}
+\toprule
+Frequency & Low & Medium & High & Total \\
+\midrule
+Monthly   & 1{,}227 (81.8\%) & \textbf{0} & 273 (18.2\%) & 1{,}500 \\
+Quarterly & 1{,}392 (92.8\%) & \textbf{0} & 108 (7.2\%)  & 1{,}500 \\
+\botrule
+\end{tabular}
+\end{table}
+
+The 27 affected task configurations (1.9\% of all bucket tasks) are excluded
+from comparative analyses.
+The binary split retains a meaningful interpretation: Low = series where
+lagged ridge regression is near-optimal; High = the minority with
+genuinely exploitable nonlinear structure.
+This is in fact the sharpest regime contrast among all six features.
+
+% ---------------------------------------------------------------------------
+\subsection{Statistical Significance}\label{sec:significance}
+% ---------------------------------------------------------------------------
+
+Wilcoxon signed-rank tests with Holm--Bonferroni correction were applied to
+each (model, decomposition, bucket) combination ($n = 81$ tests total).
+Results:
+
+\begin{itemize}
+  \item \textbf{Significantly helps:} 55/81 (67.9\%),
+        all $p_{\mathrm{Holm}} < 0.001$.
+  \item \textbf{Significantly harms:} 23/81 (28.4\%),
+        all $p_{\mathrm{Holm}} < 0.001$.
+  \item \textbf{Neutral (not significant):} 3/81 (3.7\%).
+\end{itemize}
+
+The five most improved combinations are all non-linear models paired with
+the Medium bucket and STL decomposition (Table~\ref{tab:top5_sig}).
+The STL-SN + Medium + AutoXGBoost combination is the single strongest result
+in the study (median $\Delta_{\mathrm{FT}} = +0.334$, win rate $72.3\%$).
+
+\begin{table}[ht]
+\caption{Top-5 significantly improved model $\times$ bucket combinations
+(Wilcoxon + Holm, all $p_{\mathrm{Holm}} < 0.001$).}\label{tab:top5_sig}
+\begin{tabular*}{\textwidth}{@{\extracolsep\fill}llllcc}
+\toprule
+Family & Model & Decomp.\ & Bucket & Med.\ $\Delta$ & Win rate \\
+\midrule
+ML          & AutoXGBoost      & STL-SN & Medium & $+0.334$ & $72.3\%$ \\
+ML          & AutoXGBoost      & STL-AC & Medium & $+0.308$ & $66.9\%$ \\
+Neural      & AutoLSTM         & STL-SN & Medium & $+0.299$ & $69.2\%$ \\
+ML          & AutoRandomForest & STL-AC & Medium & $+0.291$ & $64.4\%$ \\
+ML          & AutoRandomForest & STL-SN & Medium & $+0.290$ & $68.2\%$ \\
+\botrule
+\end{tabular*}
+\end{table}
+
+The significantly harmed combinations are exclusively linear models and
+AutoNLinear, with the worst harm for AutoNLinear under STL-AC
+(median $\Delta_{\mathrm{FT}} = -0.088$, win rate $34.5\%$).
+Linear models under STL-AC suffer doubly: the global model must simultaneously
+fit trend, seasonal, and residual components of $\approx\!250$ series, giving
+each linear submodel too few degrees of freedom while compounding errors
+through recomposition.
+
+% ---------------------------------------------------------------------------
+\subsection{Summary of Findings}\label{sec:summary}
+% ---------------------------------------------------------------------------
+
+\begin{enumerate}
+  \item \textbf{STL decomposition effects are family-specific}
+    (Section~\ref{sec:stl_results}).
+    Transformers benefit robustly ($\Delta_{\mathrm{STL}}$ positive in mean
+    \emph{and} median, win rate $\approx 68\%$).
+    Neural and ML models show positive medians but severely negative means due
+    to STL failure on non-stationary series.
+    Statistical models are uniformly harmed---their internal trend-seasonal
+    modelling makes STL preprocessing redundant.
+
+  \item \textbf{Bucket specialisation improves non-linear models, harms linear
+    ones} (Section~\ref{sec:linvnonlin}).
+    Non-linear architectures gain median $+0.092$ (win rate 60.1\%); linear
+    models lose median $-0.014$ (win rate 48.1\%).
+    The split is statistically significant in 67.9\% of tested configurations.
+
+  \item \textbf{The Medium bucket is most reliable; STL-SN is the safest
+    pairing} (Sections~\ref{sec:ft_overall}, \ref{sec:ft_stl_interact}).
+    Medium-bucket series yield the most consistent specialisation gains.
+    STL-SN before bucket training gives positive mean \emph{and} median delta,
+    eliminating the catastrophic failures seen under Direct.
+
+  \item \textbf{Feature nonlinearity collapses to binary bucketing on M-competition
+    data} (Section~\ref{sec:nonlin_edge}).
+    The zero-floor of $\phi_2$ causes $q_{1/3} = q_{2/3} = 0$, emptying the
+    Medium bucket and reducing stratification to Low/High for 1.9\% of tasks.
+    Tercile-based partitioning requires a minimum-support guard when features
+    have degenerate distributions.
+\end{enumerate}
+
+% ---------------------------------------------------------------------------
+\section{Discussion}\label{sec:discussion}
+% TODO
+% ---------------------------------------------------------------------------
+
+% ---------------------------------------------------------------------------
+\section{Conclusion}\label{sec:conclusion}
+% TODO
+% ---------------------------------------------------------------------------
+
+\backmatter
+
+\bmhead{Acknowledgements}
+% TODO
+
+\section*{Declarations}
+
+\begin{itemize}
+  \item \textbf{Funding:} Not applicable.
+  \item \textbf{Conflict of interest:} The author declares no competing interests.
+  \item \textbf{Ethics approval:} Not applicable.
+  \item \textbf{Data availability:} The M3 and M4 datasets are publicly available
+    at \url{https://forecasters.org/resources/time-series-data/}.
+  \item \textbf{Code availability:} Source code will be made available upon
+    acceptance.
+  \item \textbf{Author contribution:} D.C. conceived and designed the study,
+    implemented the pipeline, ran all experiments, and wrote the manuscript.
+\end{itemize}
+
+\bibliography{references}
+
+\end{document}

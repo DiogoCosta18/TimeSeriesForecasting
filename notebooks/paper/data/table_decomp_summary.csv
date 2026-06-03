@@ -1,0 +1,9 @@
+Family,Decomposition,Mean RelNaive Δ,% Series Helped,Mean POCID Δ
+Transformers,STL–SeasonalNaive,0.0611,57.6,0.0051
+Transformers,STL–AllComponents,0.014,59.6,0.0085
+Statistical,STL–SeasonalNaive,-0.0087,37.1,0.0857
+Neural,STL–SeasonalNaive,-0.012,52.2,0.0045
+ML,STL–AllComponents,-0.0262,53.1,0.0064
+Statistical,STL–AllComponents,-0.028,39.8,0.0897
+ML,STL–SeasonalNaive,-0.0407,49.8,0.0045
+Neural,STL–AllComponents,-0.0487,55.3,0.0063

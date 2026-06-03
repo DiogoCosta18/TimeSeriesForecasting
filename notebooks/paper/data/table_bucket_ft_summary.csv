@@ -1,0 +1,10 @@
+trained_on_bucket,model_family,mean,median,win_rate,n
+High,ML,-0.0782,0.054,0.556,193284
+High,Neural,0.0404,0.0461,0.5623,144963
+High,Transformer,-0.0442,0.0349,0.556,96642
+Low,ML,-0.0761,0.0627,0.564,271164
+Low,Neural,0.0202,0.0466,0.556,203373
+Low,Transformer,-0.0506,0.0294,0.5467,135582
+Medium,ML,-0.0448,0.0783,0.5764,179880
+Medium,Neural,0.0473,0.0581,0.5695,134910
+Medium,Transformer,-0.0348,0.0337,0.5504,89940

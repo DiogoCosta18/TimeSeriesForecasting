@@ -1,0 +1,7 @@
+Feature,1st,2nd,3rd
+Non-normality,AutoETS (Direct/GL) 0.791 ~,AutoARIMA (Direct/GL) 0.798 ~,AutoSARIMA (Direct/GL) 0.798 ~
+Nonlinearity,AutoETS (Direct/GL) 0.791 ~,AutoARIMA (Direct/GL) 0.798 ~,AutoSARIMA (Direct/GL) 0.798 ~
+Spectral entropy,AutoETS (Direct/GL) 0.791 ~,AutoARIMA (Direct/GL) 0.798 ~,AutoSARIMA (Direct/GL) 0.798 ~
+Evolv. seasonality,AutoETS (Direct/GL) 0.791 ~,AutoARIMA (Direct/GL) 0.798 ~,AutoSARIMA (Direct/GL) 0.798 ~
+Structural break,AutoETS (Direct/GL) 0.791 ~,AutoARIMA (Direct/GL) 0.798 ~,AutoSARIMA (Direct/GL) 0.798 ~
+ARCH/volatility,AutoETS (Direct/GL) 0.791 ~,AutoARIMA (Direct/GL) 0.798 ~,AutoSARIMA (Direct/GL) 0.798 ~

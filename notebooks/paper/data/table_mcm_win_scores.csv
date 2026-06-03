@@ -1,0 +1,13 @@
+,0
+AutoETS,11
+AutoNLinear,9
+AutoRidge,6
+AutoLinearRegression,4
+AutoARIMA,2
+AutoSARIMA,2
+AutoNHITS,-1
+AutoPatchTST,-1
+AutoTFT,-5
+AutoLSTM,-7
+AutoXGBoost,-9
+AutoRandomForest,-11
