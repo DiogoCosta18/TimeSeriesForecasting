@@ -13,7 +13,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-RUN_ROOT = Path("../../forecasting_pipeline/outputs/run_20260525T112121")
+RUN_ROOT = Path("../run_results")
 OUT = Path("data")
 OUT.mkdir(exist_ok=True)
 
