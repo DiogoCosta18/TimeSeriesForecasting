@@ -1,6 +1,6 @@
 %% BioMed_Central_Bib_Style_v1.01
 
-\begin{thebibliography}{21}
+\begin{thebibliography}{34}
 % BibTex style file: bmc-mathphys.bst (version 2.1), 2014-07-24
 \ifx \bisbn   \undefined \def \bisbn  #1{ISBN #1}\fi
 \ifx \binits  \undefined \def \binits#1{#1}\fi
@@ -44,111 +44,6 @@
 \csname PreBibitemsHook\endcsname
 
 %%% 1
-\bibitem[\protect\citeauthoryear{Makridakis and Hibon}{2000}]{makridakis2000m3}
-\begin{barticle}
-\bauthor{\bsnm{Makridakis}, \binits{S.}},
-\bauthor{\bsnm{Hibon}, \binits{M.}}:
-\batitle{The {M3-Competition}: Results, conclusions and implications}.
-\bjtitle{International Journal of Forecasting}
-\bvolume{16}(\bissue{4}),
-\bfpage{451}--\blpage{476}
-(\byear{2000})
-\end{barticle}
-\endbibitem
-
-%%% 2
-\bibitem[\protect\citeauthoryear{Makridakis et~al.}{2020}]{makridakis2020m4}
-\begin{barticle}
-\bauthor{\bsnm{Makridakis}, \binits{S.}},
-\bauthor{\bsnm{Spiliotis}, \binits{E.}},
-\bauthor{\bsnm{Assimakopoulos}, \binits{V.}}:
-\batitle{The {M4} competition: 100{,}000 time series and 61 forecasting
-  methods}.
-\bjtitle{International Journal of Forecasting}
-\bvolume{36}(\bissue{1}),
-\bfpage{54}--\blpage{74}
-(\byear{2020})
-\end{barticle}
-\endbibitem
-
-%%% 3
-\bibitem[\protect\citeauthoryear{D'Agostino}{1971}]{dagostino1971}
-\begin{barticle}
-\bauthor{\bsnm{D'Agostino}, \binits{R.B.}}:
-\batitle{An omnibus test of normality for moderate and large size samples}.
-\bjtitle{Biometrika}
-\bvolume{58}(\bissue{2}),
-\bfpage{341}--\blpage{348}
-(\byear{1971})
-\end{barticle}
-\endbibitem
-
-%%% 4
-\bibitem[\protect\citeauthoryear{Hoerl and Kennard}{1970}]{hoerl1970ridge}
-\begin{barticle}
-\bauthor{\bsnm{Hoerl}, \binits{A.E.}},
-\bauthor{\bsnm{Kennard}, \binits{R.W.}}:
-\batitle{Ridge regression: Biased estimation for nonorthogonal problems}.
-\bjtitle{Technometrics}
-\bvolume{12}(\bissue{1}),
-\bfpage{55}--\blpage{67}
-(\byear{1970})
-\end{barticle}
-\endbibitem
-
-%%% 5
-\bibitem[\protect\citeauthoryear{Breiman}{2001}]{breiman2001random}
-\begin{barticle}
-\bauthor{\bsnm{Breiman}, \binits{L.}}:
-\batitle{Random forests}.
-\bjtitle{Machine Learning}
-\bvolume{45}(\bissue{1}),
-\bfpage{5}--\blpage{32}
-(\byear{2001})
-\end{barticle}
-\endbibitem
-
-%%% 6
-\bibitem[\protect\citeauthoryear{Pincus}{2016}]{spectral_entropy_ref}
-\begin{barticle}
-\bauthor{\bsnm{Pincus}, \binits{S.M.}}:
-\batitle{Measuring complexity and predictability of time series with flexible
-  multiscale entropy for sensor networks}.
-\bjtitle{Sensors}
-\bvolume{16}(\bissue{6}),
-\bfpage{783}
-(\byear{2016})
-\end{barticle}
-\endbibitem
-
-%%% 7
-\bibitem[\protect\citeauthoryear{Killick et~al.}{2012}]{killick2012}
-\begin{barticle}
-\bauthor{\bsnm{Killick}, \binits{R.}},
-\bauthor{\bsnm{Fearnhead}, \binits{P.}},
-\bauthor{\bsnm{Eckley}, \binits{I.A.}}:
-\batitle{Optimal detection of changepoints with a linear computational cost}.
-\bjtitle{Journal of the American Statistical Association}
-\bvolume{107}(\bissue{500}),
-\bfpage{1590}--\blpage{1598}
-(\byear{2012})
-\end{barticle}
-\endbibitem
-
-%%% 8
-\bibitem[\protect\citeauthoryear{Engle}{1982}]{engle1982arch}
-\begin{barticle}
-\bauthor{\bsnm{Engle}, \binits{R.F.}}:
-\batitle{Autoregressive conditional heteroscedasticity with estimates of the
-  variance of {United Kingdom} inflation}.
-\bjtitle{Econometrica}
-\bvolume{50}(\bissue{4}),
-\bfpage{987}--\blpage{1007}
-(\byear{1982})
-\end{barticle}
-\endbibitem
-
-%%% 9
 \bibitem[\protect\citeauthoryear{Cleveland et~al.}{1990}]{cleveland1990stl}
 \begin{barticle}
 \bauthor{\bsnm{Cleveland}, \binits{R.B.}},
@@ -163,7 +58,275 @@
 \end{barticle}
 \endbibitem
 
+%%% 2
+\bibitem[\protect\citeauthoryear{Smyl}{2020}]{smyl2020hybrid}
+\begin{barticle}
+\bauthor{\bsnm{Smyl}, \binits{S.}}:
+\batitle{A hybrid method of exponential smoothing and recurrent neural networks
+  for time series forecasting}.
+\bjtitle{International Journal of Forecasting}
+\bvolume{36}(\bissue{1}),
+\bfpage{75}--\blpage{85}
+(\byear{2020})
+\end{barticle}
+\endbibitem
+
+%%% 3
+\bibitem[\protect\citeauthoryear{Wu et~al.}{2021}]{wu2021autoformer}
+\begin{bchapter}
+\bauthor{\bsnm{Wu}, \binits{H.}},
+\bauthor{\bsnm{Xu}, \binits{J.}},
+\bauthor{\bsnm{Wang}, \binits{J.}},
+\bauthor{\bsnm{Long}, \binits{M.}}:
+\bctitle{Autoformer: Decomposition transformers with auto-correlation for
+  long-term series forecasting}.
+In: \bbtitle{Advances in Neural Information Processing Systems},
+vol. \bseriesno{34},
+pp. \bfpage{22419}--\blpage{22430}
+(\byear{2021})
+\end{bchapter}
+\endbibitem
+
+%%% 4
+\bibitem[\protect\citeauthoryear{Zeng et~al.}{2023}]{zeng2023dlinear}
+\begin{bchapter}
+\bauthor{\bsnm{Zeng}, \binits{A.}},
+\bauthor{\bsnm{Chen}, \binits{M.}},
+\bauthor{\bsnm{Zhang}, \binits{L.}},
+\bauthor{\bsnm{Xu}, \binits{Q.}}:
+\bctitle{Are transformers effective for time series forecasting?}
+In: \bbtitle{Proceedings of the AAAI Conference on Artificial Intelligence},
+vol. \bseriesno{37},
+pp. \bfpage{11121}--\blpage{11128}
+(\byear{2023})
+\end{bchapter}
+\endbibitem
+
+%%% 5
+\bibitem[\protect\citeauthoryear{Zhang and Qi}{2005}]{zhang2005neural}
+\begin{barticle}
+\bauthor{\bsnm{Zhang}, \binits{G.P.}},
+\bauthor{\bsnm{Qi}, \binits{M.}}:
+\batitle{Neural network forecasting for seasonal and trend time series}.
+\bjtitle{European Journal of Operational Research}
+\bvolume{160}(\bissue{2}),
+\bfpage{501}--\blpage{514}
+(\byear{2005})
+\end{barticle}
+\endbibitem
+
+%%% 6
+\bibitem[\protect\citeauthoryear{Theodosiou}{2011}]{theodosiou2011stl}
+\begin{barticle}
+\bauthor{\bsnm{Theodosiou}, \binits{M.}}:
+\batitle{Forecasting monthly and quarterly time series using {STL}
+  decomposition}.
+\bjtitle{International Journal of Forecasting}
+\bvolume{27}(\bissue{4}),
+\bfpage{1178}--\blpage{1195}
+(\byear{2011})
+\end{barticle}
+\endbibitem
+
+%%% 7
+\bibitem[\protect\citeauthoryear{Bergmeir et~al.}{2016}]{bergmeir2016bagging}
+\begin{barticle}
+\bauthor{\bsnm{Bergmeir}, \binits{C.}},
+\bauthor{\bsnm{Hyndman}, \binits{R.J.}},
+\bauthor{\bsnm{Benítez}, \binits{J.M.}}:
+\batitle{Bagging exponential smoothing methods using {STL} decomposition and
+  {Box--Cox} transformation}.
+\bjtitle{International Journal of Forecasting}
+\bvolume{32}(\bissue{2}),
+\bfpage{303}--\blpage{312}
+(\byear{2016})
+\end{barticle}
+\endbibitem
+
+%%% 8
+\bibitem[\protect\citeauthoryear{Hewamalage et~al.}{2021}]{hewamalage2021rnn}
+\begin{barticle}
+\bauthor{\bsnm{Hewamalage}, \binits{H.}},
+\bauthor{\bsnm{Bergmeir}, \binits{C.}},
+\bauthor{\bsnm{Bandara}, \binits{K.}}:
+\batitle{Recurrent neural networks for time series forecasting: Current status
+  and future directions}.
+\bjtitle{International Journal of Forecasting}
+\bvolume{37}(\bissue{1}),
+\bfpage{388}--\blpage{427}
+(\byear{2021})
+\end{barticle}
+\endbibitem
+
+%%% 9
+\bibitem[\protect\citeauthoryear{Bandara et~al.}{2020}]{bandara2020clustering}
+\begin{barticle}
+\bauthor{\bsnm{Bandara}, \binits{K.}},
+\bauthor{\bsnm{Bergmeir}, \binits{C.}},
+\bauthor{\bsnm{Smyl}, \binits{S.}}:
+\batitle{Forecasting across time series databases using recurrent neural
+  networks on groups of similar series: A clustering approach}.
+\bjtitle{Expert Systems with Applications}
+\bvolume{140},
+\bfpage{112896}
+(\byear{2020})
+\end{barticle}
+\endbibitem
+
 %%% 10
+\bibitem[\protect\citeauthoryear{Wang et~al.}{2009}]{wang2009rules}
+\begin{barticle}
+\bauthor{\bsnm{Wang}, \binits{X.}},
+\bauthor{\bsnm{Smith-Miles}, \binits{K.}},
+\bauthor{\bsnm{Hyndman}, \binits{R.J.}}:
+\batitle{Rule induction for forecasting method selection: Meta-learning the
+  characteristics of univariate time series}.
+\bjtitle{Neurocomputing}
+\bvolume{72}(\bissue{10--12}),
+\bfpage{2581}--\blpage{2594}
+(\byear{2009})
+\end{barticle}
+\endbibitem
+
+%%% 11
+\bibitem[\protect\citeauthoryear{Kang et~al.}{2017}]{spectral_entropy_ref}
+\begin{barticle}
+\bauthor{\bsnm{Kang}, \binits{Y.}},
+\bauthor{\bsnm{Hyndman}, \binits{R.J.}},
+\bauthor{\bsnm{Smith-Miles}, \binits{K.}}:
+\batitle{Visualising forecasting algorithm performance using time series
+  instance spaces}.
+\bjtitle{International Journal of Forecasting}
+\bvolume{33}(\bissue{2}),
+\bfpage{345}--\blpage{358}
+(\byear{2017})
+\end{barticle}
+\endbibitem
+
+%%% 12
+\bibitem[\protect\citeauthoryear{Talagala
+  et~al.}{2023}]{talagala2023metalearning}
+\begin{barticle}
+\bauthor{\bsnm{Talagala}, \binits{T.S.}},
+\bauthor{\bsnm{Hyndman}, \binits{R.J.}},
+\bauthor{\bsnm{Athanasopoulos}, \binits{G.}}:
+\batitle{Meta-learning how to forecast time series}.
+\bjtitle{Journal of Forecasting}
+\bvolume{42}(\bissue{6}),
+\bfpage{1476}--\blpage{1501}
+(\byear{2023})
+\end{barticle}
+\endbibitem
+
+%%% 13
+\bibitem[\protect\citeauthoryear{Montero-Manso
+  et~al.}{2020}]{montero2020fforma}
+\begin{barticle}
+\bauthor{\bsnm{Montero-Manso}, \binits{P.}},
+\bauthor{\bsnm{Athanasopoulos}, \binits{G.}},
+\bauthor{\bsnm{Hyndman}, \binits{R.J.}},
+\bauthor{\bsnm{Talagala}, \binits{T.S.}}:
+\batitle{{FFORMA}: Feature-based forecast model averaging}.
+\bjtitle{International Journal of Forecasting}
+\bvolume{36}(\bissue{1}),
+\bfpage{86}--\blpage{92}
+(\byear{2020})
+\end{barticle}
+\endbibitem
+
+%%% 14
+\bibitem[\protect\citeauthoryear{Makridakis and Hibon}{2000}]{makridakis2000m3}
+\begin{barticle}
+\bauthor{\bsnm{Makridakis}, \binits{S.}},
+\bauthor{\bsnm{Hibon}, \binits{M.}}:
+\batitle{The {M3-Competition}: Results, conclusions and implications}.
+\bjtitle{International Journal of Forecasting}
+\bvolume{16}(\bissue{4}),
+\bfpage{451}--\blpage{476}
+(\byear{2000})
+\end{barticle}
+\endbibitem
+
+%%% 15
+\bibitem[\protect\citeauthoryear{Makridakis et~al.}{2020}]{makridakis2020m4}
+\begin{barticle}
+\bauthor{\bsnm{Makridakis}, \binits{S.}},
+\bauthor{\bsnm{Spiliotis}, \binits{E.}},
+\bauthor{\bsnm{Assimakopoulos}, \binits{V.}}:
+\batitle{The {M4} competition: 100{,}000 time series and 61 forecasting
+  methods}.
+\bjtitle{International Journal of Forecasting}
+\bvolume{36}(\bissue{1}),
+\bfpage{54}--\blpage{74}
+(\byear{2020})
+\end{barticle}
+\endbibitem
+
+%%% 16
+\bibitem[\protect\citeauthoryear{D'Agostino}{1971}]{dagostino1971}
+\begin{barticle}
+\bauthor{\bsnm{D'Agostino}, \binits{R.B.}}:
+\batitle{An omnibus test of normality for moderate and large size samples}.
+\bjtitle{Biometrika}
+\bvolume{58}(\bissue{2}),
+\bfpage{341}--\blpage{348}
+(\byear{1971})
+\end{barticle}
+\endbibitem
+
+%%% 17
+\bibitem[\protect\citeauthoryear{Hoerl and Kennard}{1970}]{hoerl1970ridge}
+\begin{barticle}
+\bauthor{\bsnm{Hoerl}, \binits{A.E.}},
+\bauthor{\bsnm{Kennard}, \binits{R.W.}}:
+\batitle{Ridge regression: Biased estimation for nonorthogonal problems}.
+\bjtitle{Technometrics}
+\bvolume{12}(\bissue{1}),
+\bfpage{55}--\blpage{67}
+(\byear{1970})
+\end{barticle}
+\endbibitem
+
+%%% 18
+\bibitem[\protect\citeauthoryear{Breiman}{2001}]{breiman2001random}
+\begin{barticle}
+\bauthor{\bsnm{Breiman}, \binits{L.}}:
+\batitle{Random forests}.
+\bjtitle{Machine Learning}
+\bvolume{45}(\bissue{1}),
+\bfpage{5}--\blpage{32}
+(\byear{2001})
+\end{barticle}
+\endbibitem
+
+%%% 19
+\bibitem[\protect\citeauthoryear{Killick et~al.}{2012}]{killick2012}
+\begin{barticle}
+\bauthor{\bsnm{Killick}, \binits{R.}},
+\bauthor{\bsnm{Fearnhead}, \binits{P.}},
+\bauthor{\bsnm{Eckley}, \binits{I.A.}}:
+\batitle{Optimal detection of changepoints with a linear computational cost}.
+\bjtitle{Journal of the American Statistical Association}
+\bvolume{107}(\bissue{500}),
+\bfpage{1590}--\blpage{1598}
+(\byear{2012})
+\end{barticle}
+\endbibitem
+
+%%% 20
+\bibitem[\protect\citeauthoryear{Engle}{1982}]{engle1982arch}
+\begin{barticle}
+\bauthor{\bsnm{Engle}, \binits{R.F.}}:
+\batitle{Autoregressive conditional heteroscedasticity with estimates of the
+  variance of {United Kingdom} inflation}.
+\bjtitle{Econometrica}
+\bvolume{50}(\bissue{4}),
+\bfpage{987}--\blpage{1007}
+(\byear{1982})
+\end{barticle}
+\endbibitem
+
+%%% 21
 \bibitem[\protect\citeauthoryear{Seabold and Perktold}{2010}]{seabold2010}
 \begin{bchapter}
 \bauthor{\bsnm{Seabold}, \binits{S.}},
@@ -175,7 +338,7 @@ pp. \bfpage{92}--\blpage{96}
 \end{bchapter}
 \endbibitem
 
-%%% 11
+%%% 22
 \bibitem[\protect\citeauthoryear{Hyndman and
   Khandakar}{2008}]{hyndman2008automatic}
 \begin{barticle}
@@ -190,7 +353,7 @@ pp. \bfpage{92}--\blpage{96}
 \end{barticle}
 \endbibitem
 
-%%% 12
+%%% 23
 \bibitem[\protect\citeauthoryear{Hyndman et~al.}{2008}]{hyndman2008exponential}
 \begin{bbook}
 \bauthor{\bsnm{Hyndman}, \binits{R.J.}},
@@ -203,7 +366,7 @@ pp. \bfpage{92}--\blpage{96}
 \end{bbook}
 \endbibitem
 
-%%% 13
+%%% 24
 \bibitem[\protect\citeauthoryear{Olivares
   et~al.}{2022}]{olivares2022statsforecast}
 \begin{botherref}
@@ -219,7 +382,7 @@ arXiv preprint arXiv:2207.03175
 \end{botherref}
 \endbibitem
 
-%%% 14
+%%% 25
 \bibitem[\protect\citeauthoryear{Chen and Guestrin}{2016}]{chen2016xgboost}
 \begin{bchapter}
 \bauthor{\bsnm{Chen}, \binits{T.}},
@@ -232,7 +395,7 @@ pp. \bfpage{785}--\blpage{794}
 \end{bchapter}
 \endbibitem
 
-%%% 15
+%%% 26
 \bibitem[\protect\citeauthoryear{Garza et~al.}{2022}]{garza2022mlforecast}
 \begin{botherref}
 \oauthor{\bsnm{Garza}, \binits{F.}},
@@ -240,12 +403,12 @@ pp. \bfpage{785}--\blpage{794}
 \oauthor{\bsnm{Challú}, \binits{C.}},
 \oauthor{\bsnm{Olivares}, \binits{K.G.}}:
 Mlforecast: Scalable machine learning for time series forecasting.
-arXiv preprint arXiv:2207.03175
+arXiv preprint arXiv:2308.09372
 (2022)
 \end{botherref}
 \endbibitem
 
-%%% 16
+%%% 27
 \bibitem[\protect\citeauthoryear{Akiba et~al.}{2019}]{akiba2019optuna}
 \begin{bchapter}
 \bauthor{\bsnm{Akiba}, \binits{T.}},
@@ -261,7 +424,7 @@ pp. \bfpage{2623}--\blpage{2631}
 \end{bchapter}
 \endbibitem
 
-%%% 17
+%%% 28
 \bibitem[\protect\citeauthoryear{Challu et~al.}{2023}]{challu2023nhits}
 \begin{bchapter}
 \bauthor{\bsnm{Challu}, \binits{C.}},
@@ -279,7 +442,7 @@ pp. \bfpage{6989}--\blpage{6997}
 \end{bchapter}
 \endbibitem
 
-%%% 18
+%%% 29
 \bibitem[\protect\citeauthoryear{Olivares
   et~al.}{2023}]{olivares2023neuralforecast}
 \begin{botherref}
@@ -289,12 +452,12 @@ pp. \bfpage{6989}--\blpage{6997}
 \oauthor{\bsnm{Canseco}, \binits{M.M.}},
 \oauthor{\bsnm{Dubrawski}, \binits{A.}}:
 Neuralforecast: User friendly state-of-the-art neural forecasting models.
-arXiv preprint arXiv:2207.03175
+arXiv preprint arXiv:2304.02673
 (2023)
 \end{botherref}
 \endbibitem
 
-%%% 19
+%%% 30
 \bibitem[\protect\citeauthoryear{Lim et~al.}{2021}]{lim2021tft}
 \begin{barticle}
 \bauthor{\bsnm{Lim}, \binits{B.}},
@@ -310,7 +473,7 @@ arXiv preprint arXiv:2207.03175
 \end{barticle}
 \endbibitem
 
-%%% 20
+%%% 31
 \bibitem[\protect\citeauthoryear{Nie et~al.}{2023}]{nie2022patchtst}
 \begin{bchapter}
 \bauthor{\bsnm{Nie}, \binits{Y.}},
@@ -324,7 +487,7 @@ In: \bbtitle{International Conference on Learning Representations}
 \end{bchapter}
 \endbibitem
 
-%%% 21
+%%% 32
 \bibitem[\protect\citeauthoryear{Tashman}{2000}]{tashman2000}
 \begin{barticle}
 \bauthor{\bsnm{Tashman}, \binits{L.J.}}:
@@ -333,6 +496,30 @@ In: \bbtitle{International Conference on Learning Representations}
 \bvolume{16}(\bissue{4}),
 \bfpage{437}--\blpage{450}
 (\byear{2000})
+\end{barticle}
+\endbibitem
+
+%%% 33
+\bibitem[\protect\citeauthoryear{Wilcoxon}{1945}]{wilcoxon1945}
+\begin{barticle}
+\bauthor{\bsnm{Wilcoxon}, \binits{F.}}:
+\batitle{Individual comparisons by ranking methods}.
+\bjtitle{Biometrics Bulletin}
+\bvolume{1}(\bissue{6}),
+\bfpage{80}--\blpage{83}
+(\byear{1945})
+\end{barticle}
+\endbibitem
+
+%%% 34
+\bibitem[\protect\citeauthoryear{Holm}{1979}]{holm1979}
+\begin{barticle}
+\bauthor{\bsnm{Holm}, \binits{S.}}:
+\batitle{A simple sequentially rejective multiple test procedure}.
+\bjtitle{Scandinavian Journal of Statistics}
+\bvolume{6}(\bissue{2}),
+\bfpage{65}--\blpage{70}
+(\byear{1979})
 \end{barticle}
 \endbibitem
 

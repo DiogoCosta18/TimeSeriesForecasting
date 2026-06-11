@@ -87,7 +87,7 @@
 @article{garza2022mlforecast,
   title   = {MLForecast: Scalable Machine Learning for Time Series Forecasting},
   author  = {Garza, Federico and Canseco, Max Mergenthaler and Challú, Cristian and Olivares, Kin G},
-  journal = {arXiv preprint arXiv:2207.03175},
+  journal = {arXiv preprint arXiv:2308.09372},
   year    = {2022}
 }
 
@@ -104,7 +104,7 @@
 @article{olivares2023neuralforecast,
   title   = {NeuralForecast: User Friendly State-of-the-Art Neural Forecasting Models},
   author  = {Olivares, Kin G and Challu, Cristian and Garza, Federico and Canseco, Max Mergenthaler and Dubrawski, Artur},
-  journal = {arXiv preprint arXiv:2207.03175},
+  journal = {arXiv preprint arXiv:2304.02673},
   year    = {2023}
 }
 
@@ -167,13 +167,34 @@
 }
 
 @article{spectral_entropy_ref,
-  title   = {Measuring Complexity and Predictability of Time Series with Flexible Multiscale Entropy for Sensor Networks},
-  author  = {Pincus, Steven M},
-  journal = {Sensors},
-  volume  = {16},
+  title   = {Visualising Forecasting Algorithm Performance Using Time Series Instance Spaces},
+  author  = {Kang, Yanfei and Hyndman, Rob J and Smith-Miles, Kate},
+  journal = {International Journal of Forecasting},
+  volume  = {33},
+  number  = {2},
+  pages   = {345--358},
+  year    = {2017}
+}
+
+% Statistical tests
+@article{wilcoxon1945,
+  title   = {Individual Comparisons by Ranking Methods},
+  author  = {Wilcoxon, Frank},
+  journal = {Biometrics Bulletin},
+  volume  = {1},
   number  = {6},
-  pages   = {783},
-  year    = {2016}
+  pages   = {80--83},
+  year    = {1945}
+}
+
+@article{holm1979,
+  title   = {A Simple Sequentially Rejective Multiple Test Procedure},
+  author  = {Holm, Sture},
+  journal = {Scandinavian Journal of Statistics},
+  volume  = {6},
+  number  = {2},
+  pages   = {65--70},
+  year    = {1979}
 }
 
 % Cross-validation
@@ -194,4 +215,114 @@
   booktitle = {9th Python in Science Conference},
   pages     = {92--96},
   year      = {2010}
+}
+
+% Related work: decomposition-based forecasting
+@article{zhang2005neural,
+  title   = {Neural Network Forecasting for Seasonal and Trend Time Series},
+  author  = {Zhang, G Peter and Qi, Min},
+  journal = {European Journal of Operational Research},
+  volume  = {160},
+  number  = {2},
+  pages   = {501--514},
+  year    = {2005}
+}
+
+@article{theodosiou2011stl,
+  title   = {Forecasting Monthly and Quarterly Time Series Using {STL} Decomposition},
+  author  = {Theodosiou, Marina},
+  journal = {International Journal of Forecasting},
+  volume  = {27},
+  number  = {4},
+  pages   = {1178--1195},
+  year    = {2011}
+}
+
+@article{bergmeir2016bagging,
+  title   = {Bagging Exponential Smoothing Methods Using {STL} Decomposition and {Box--Cox} Transformation},
+  author  = {Bergmeir, Christoph and Hyndman, Rob J and Benítez, José M},
+  journal = {International Journal of Forecasting},
+  volume  = {32},
+  number  = {2},
+  pages   = {303--312},
+  year    = {2016}
+}
+
+@inproceedings{wu2021autoformer,
+  title     = {Autoformer: Decomposition Transformers with Auto-Correlation for Long-Term Series Forecasting},
+  author    = {Wu, Haixu and Xu, Jiehui and Wang, Jianmin and Long, Mingsheng},
+  booktitle = {Advances in Neural Information Processing Systems},
+  volume    = {34},
+  pages     = {22419--22430},
+  year      = {2021}
+}
+
+@inproceedings{zeng2023dlinear,
+  title     = {Are Transformers Effective for Time Series Forecasting?},
+  author    = {Zeng, Ailing and Chen, Muxi and Zhang, Lei and Xu, Qiang},
+  booktitle = {Proceedings of the AAAI Conference on Artificial Intelligence},
+  volume    = {37},
+  pages     = {11121--11128},
+  year      = {2023}
+}
+
+% Related work: global forecasting models
+@article{smyl2020hybrid,
+  title   = {A Hybrid Method of Exponential Smoothing and Recurrent Neural Networks for Time Series Forecasting},
+  author  = {Smyl, Slawek},
+  journal = {International Journal of Forecasting},
+  volume  = {36},
+  number  = {1},
+  pages   = {75--85},
+  year    = {2020}
+}
+
+@article{hewamalage2021rnn,
+  title   = {Recurrent Neural Networks for Time Series Forecasting: Current Status and Future Directions},
+  author  = {Hewamalage, Hansika and Bergmeir, Christoph and Bandara, Kasun},
+  journal = {International Journal of Forecasting},
+  volume  = {37},
+  number  = {1},
+  pages   = {388--427},
+  year    = {2021}
+}
+
+@article{bandara2020clustering,
+  title   = {Forecasting Across Time Series Databases Using Recurrent Neural Networks on Groups of Similar Series: A Clustering Approach},
+  author  = {Bandara, Kasun and Bergmeir, Christoph and Smyl, Slawek},
+  journal = {Expert Systems with Applications},
+  volume  = {140},
+  pages   = {112896},
+  year    = {2020}
+}
+
+% Related work: feature-based meta-learning
+@article{wang2009rules,
+  title   = {Rule Induction for Forecasting Method Selection: Meta-Learning the Characteristics of Univariate Time Series},
+  author  = {Wang, Xiaozhe and Smith-Miles, Kate and Hyndman, Rob J},
+  journal = {Neurocomputing},
+  volume  = {72},
+  number  = {10--12},
+  pages   = {2581--2594},
+  year    = {2009}
+}
+
+@article{montero2020fforma,
+  title   = {{FFORMA}: Feature-Based Forecast Model Averaging},
+  author  = {Montero-Manso, Pablo and Athanasopoulos, George and Hyndman, Rob J and Talagala, Thiyanga S},
+  journal = {International Journal of Forecasting},
+  volume  = {36},
+  number  = {1},
+  pages   = {86--92},
+  year    = {2020}
+}
+
+@article{talagala2023metalearning,
+  title   = {Meta-Learning How to Forecast Time Series},
+  author  = {Talagala, Thiyanga S and Hyndman, Rob J and Athanasopoulos, George},
+  journal = {Journal of Forecasting},
+  volume  = {42},
+  number  = {6},
+  pages   = {1476--1501},
+  year    = {2023}
 }
