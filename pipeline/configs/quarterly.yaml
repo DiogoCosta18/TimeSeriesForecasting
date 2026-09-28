@@ -1,0 +1,11 @@
+dataset_set: m3_m4_quarterly
+frequency: quarterly
+season_length: 4
+horizon: 8
+m3_group: Quarterly
+m4_group: Quarterly
+n_m3_requested: 750
+n_m4_requested: 750
+n_windows: 3
+step_size: 8
+
