@@ -1,24 +1,5 @@
-numpy
-pandas
-polars
-pyarrow
-scipy
-scikit-learn
-statsmodels
-ruptures
-optuna
-datasetsforecast
-statsforecast
-mlforecast
-neuralforecast
-utilsforecast
-xgboost
-torch
-lightning
-pytorch-lightning
-tqdm
-pyyaml
-joblib
-psutil
-pytest
-
+# The environment is pinned (rerun protocol D22). This file only points to the
+# resolved lockfile, so every script that runs `pip install -r requirements.txt`
+# installs exactly the locked versions. Edit environment/requirements-pinned.in
+# and regenerate the lock instead (see environment/README.md).
+-r environment/requirements-lock-linux-cu121.txt
