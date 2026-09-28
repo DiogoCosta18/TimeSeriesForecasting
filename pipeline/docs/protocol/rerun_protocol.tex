@@ -1,0 +1,1103 @@
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage{microtype}
+\usepackage[margin=2.2cm]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs,tabularx,longtable,array}
+\usepackage[table]{xcolor}
+\usepackage{enumitem}
+\usepackage{fancyhdr}
+\usepackage{underscore}
+\usepackage[hidelinks]{hyperref}
+
+\definecolor{accent}{HTML}{2C4A7C}
+\definecolor{soft}{HTML}{E9EFF7}
+\definecolor{warnsoft}{HTML}{FBF1DF}
+\definecolor{warnline}{HTML}{8A5A11}
+
+\hypersetup{colorlinks=true,linkcolor=accent,urlcolor=accent,citecolor=accent}
+
+\setlist{itemsep=2pt,topsep=4pt,parsep=0pt}
+\renewcommand{\arraystretch}{1.18}
+\setlength{\LTpre}{6pt}
+\setlength{\LTpost}{6pt}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small\color{accent}Rerun protocol --- STL decomposition study}
+\fancyhead[R]{\small\color{accent}v1.1 --- for supervisor sign-off}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+
+\newcommand{\code}[1]{\texttt{#1}}
+\newcommand{\RN}{\mathrm{RelNaive}^{(10)}}
+\newcommand{\dstl}{\Delta_{\mathrm{STL}}}
+\newcommand{\dft}{\Delta_{\mathrm{FT}}}
+
+\setlength{\fboxsep}{8pt}
+\setlength{\headheight}{14pt}
+\newsavebox{\notebox}
+\newenvironment{keybox}%
+  {\par\medskip\noindent\begin{lrbox}{\notebox}\begin{minipage}{\dimexpr\linewidth-2\fboxsep-2\fboxrule\relax}}%
+  {\end{minipage}\end{lrbox}\fcolorbox{accent}{soft}{\usebox{\notebox}}\par\medskip}
+\newenvironment{decisionbox}%
+  {\par\medskip\noindent\begin{lrbox}{\notebox}\begin{minipage}{\dimexpr\linewidth-2\fboxsep-2\fboxrule\relax}}%
+  {\end{minipage}\end{lrbox}\fcolorbox{warnline}{warnsoft}{\usebox{\notebox}}\par\medskip}
+
+\title{\color{accent}\textbf{Rerun Protocol}\\[4pt]
+\large When Does Seasonal Decomposition Help?\\
+Pipeline decisions, measurement and analysis plan, implementation,\\ testing, pilot and full runs}
+\author{Prepared for D.\ Costa, the supervisor, and the partner university team}
+\date{Version 1.1 --- 28 September 2026 --- all decisions taken; awaiting supervisor sign-off}
+
+\begin{document}
+\maketitle
+\thispagestyle{fancy}
+
+\begin{keybox}
+\textbf{What this document is.} The single reference for the rerun of the study. It records every
+design decision and the reason for it, fixes the complete list of quantities to be measured and the
+analyses to be run on them \emph{before} any data is produced, and lays out how the pipeline is
+implemented from the existing code, how it is tested, how the pilot is run and judged, and how the
+full runs are executed. After supervisor sign-off it is committed and tagged in the pipeline
+repository and frozen; later changes go only into the change log (Appendix~\ref{app:changelog})
+with a date and a reason.
+
+\smallskip
+\textbf{Bottom line.} No existing forecast file is reused as a result. The existing code is reused
+after the changes in Section~\ref{sec:impl}. One pilot, then one set of runs from one frozen
+manifest and one frozen configuration file, in strict mode, on four GPU machines. The analysis code
+is written and tested on pilot data before the full run starts.
+\end{keybox}
+
+\begin{decisionbox}
+\textbf{Status of the decisions.} Every decision in Section~\ref{sec:decisions} was taken by
+D.\ Costa on 28 September 2026 in eight rounds of structured questions. The rejected alternatives
+and their reasons are recorded in Appendix~\ref{app:alternatives}. The five technical
+specifications marked ``Protocol'' in the register (the eligibility rule derived from the length
+constraints, decomposition details, search spaces, the statistical cache and provenance fields)
+were not asked separately and are approved with the protocol at sign-off. The supervisor approves this protocol before implementation and the pilot's
+go / no-go before the full run.
+\end{decisionbox}
+
+\tableofcontents
+\newpage
+
+%=====================================================================
+\section{Purpose, scope and verdict on existing results}\label{sec:purpose}
+%=====================================================================
+
+\subsection{Why a rerun}
+
+A review of the forecasting pipeline and of every run it produced (28 September 2026) found defects
+in the data the paper was built on and in the design of the experiment itself. The full list is in
+Appendix~\ref{app:defects}; Table~\ref{tab:defects-short} summarises those that force a rerun.
+
+\begin{table}[h]
+\centering\small
+\caption{Defects that force a rerun. IDs are used throughout this document.}\label{tab:defects-short}
+\begin{tabularx}{\linewidth}{@{}l X X@{}}
+\toprule
+ID & Defect & Consequence \\
+\midrule
+C1 & The paper's global baselines and all statistical STL results came from a non-strict run whose
+forecasts are a hard-coded blend of seasonal naive, drift and mean, jittered by $\pm0.5\%$ per task.
+& Original Tables 3--8 do not describe any trained model. \\
+C2 & No global model is tuned. The ``Auto'' models are fixed configurations; tuning code writes empty
+placeholder files. The paper claims Optuna tuning over 100 trials. & Methods section is inaccurate;
+statistical models (self-selecting) are compared with untuned learners. \\
+C3 & Features are computed on the series minus only the last horizon, so they see the test targets
+of windows 0 and 1. & Bucket assignment, and every ``which series'' result, uses test data. \\
+C4 & The ML seasonal lag and the neural input size are set by the \emph{shortest} series in each
+training pool; only 33\% of quarterly cohort fits had the seasonal lag. & Both experiments are
+confounded by whether the model saw seasonal information. \\
+M1 & The two trained bodies of results use different series, and no trained global STL-AC run
+exists. & Specialisation cannot be measured on a paired basis. \\
+F1 & Features silently fall back to fixed values (0.0 or 1.0) on short series; 1.7--2.9\% of the
+old sample. & Those series pile into the extreme buckets, e.g.\ 51 series in the Low
+evolving-seasonality bucket. \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{Verdict: what is reused and what is not}
+
+\begin{itemize}
+  \item \textbf{Not reused as results:} any forecast or metric file from the 23 May, 25 May or
+  28--30 May runs. The 23 May run is not model output (C1). The other two are genuine but carry C3
+  and C4, and fixing C4 changes the forecasts themselves; mixing old and new files would recreate
+  the unpaired design (M1).
+  \item \textbf{Reused as a check:} the 25 May strict run's statistical forecasts. Statistical fits
+  do not depend on the training pool, so the new code must reproduce them row for row on the same
+  series (integration test I2).
+  \item \textbf{Reused as code:} data loading, STL transform, rolling-origin split, RelNaive metric,
+  the six feature definitions, checkpointing, scheduler and vast.ai scripts --- after the changes in
+  Section~\ref{sec:impl}, in a new dedicated repository.
+  \item \textbf{Reused as text:} introduction, related work, the 64 verified references, problem
+  formulation and the structure of the methods and results sections.
+\end{itemize}
+
+\subsection{Principles}\label{sec:principles}
+
+Every decision in Section~\ref{sec:decisions} follows from one of six principles.
+
+\begin{enumerate}[label=\textbf{P\arabic*}]
+  \item \textbf{One manifest, one configuration, one code version.} Every forecast in the study is
+  traceable to a single frozen manifest, a single frozen configuration file and a single git commit.
+  \item \textbf{Nothing from a test period is used before evaluation.} Features, sampling, buckets,
+  tuning and scaling use only observations before the first test window.
+  \item \textbf{A model's configuration never depends on who else is in the pool.} Lags, input size
+  and all hyperparameters come from the frozen configuration; series too short for them are excluded
+  before sampling.
+  \item \textbf{Every family receives comparable care.} Statistical models select their own
+  specification; global models are tuned with a comparable, documented budget.
+  \item \textbf{No silent failure path.} There is no fallback forecaster in the code. A failure is
+  recorded as a failure and counted in the results.
+  \item \textbf{The analysis refuses dirty inputs.} Automated gates check provenance, hashes,
+  completeness and pairing before any number is computed.
+\end{enumerate}
+
+%=====================================================================
+\section{Decision register}\label{sec:decisions}
+%=====================================================================
+
+``Team'' marks decisions taken by D.\ Costa in the structured questions of 28 September 2026;
+``Protocol'' marks technical specifications approved with the protocol at sign-off. Rejected
+alternatives are in Appendix~\ref{app:alternatives}; details in
+Sections~\ref{sec:data}--\ref{sec:analysis}.
+
+{\small
+\begin{longtable}{@{}p{0.6cm} p{2.1cm} p{6.3cm} p{4.3cm} p{1.5cm}@{}}
+\toprule
+ID & Topic & Decision & Rationale & By \\
+\midrule
+\endfirsthead
+\toprule
+ID & Topic & Decision & Rationale & By \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+\multicolumn{5}{@{}l}{\emph{Scope and data}}\\
+D1 & Reuse & Full rerun. Legacy statistical forecasts used only as a regression check (I2). & Section~\ref{sec:purpose}. & Team \\
+D2 & Data & M3 and M4, monthly ($m=12$, $h=18$) and quarterly ($m=4$, $h=8$) only. One frozen copy, stored with SHA-256 checksums; every machine loads the same bytes. & No new frequencies or loaders to validate; a changed mirror cannot change the data. & Team \\
+D3 & Eligibility & A series is eligible if its history before the first test window has at least $L = 3m+h$ points: 54 monthly, 20 quarterly. & Every STL fit sees $\geq 2$ seasons; tuning data holds $\geq 3m$ points; evolving seasonality gets $\geq 2$ rolling windows. Fixes C4, M4. & Protocol \\
+D4 & Features & Definitions unchanged. Computed once, on the pre-window-0 history, for every eligible series. A series with any non-``ok'' quality flag is ineligible. & Fixes C3 and F1; buckets fixed across windows; the follow-up gets features for the whole pool. & Team \\
+D5 & Feature guards & Option A: quarterly minimum lengths lowered to 20 (nonlinearity from 30, ARCH from 24); monthly guards ($\leq 48$) unchanged. Sensitivity analysis A7. & Keeps 600 per source and three windows (Section~\ref{sec:eligibility}). & Team \\
+D6 & Sampling & Per-feature stratified quantile sampling, 30 strata, 600 series per source, one seed per feature, candidate pool = all eligible series. & The pool must exceed the quota for stratification to exist (M2). & Team \\
+D7 & Buckets & Terciles per feature $\times$ frequency within the feature's sample. Degenerate if any populated bucket holds $< 20\%$: run with populated buckets, excluded from trend tests. Nonlinearity keeps its floored definition and is expected to be flagged. & Makes the collapse explicit; keeps the paper's failure-mode contribution. & Team \\
+D8 & Validation & Rolling origin, $W = 3$ windows, step $h$; every model refitted every window. & Standard protocol; all families treated alike. & Team \\
+\multicolumn{5}{@{}l}{\emph{Models and tuning}}\\
+D9 & Decomposition & Robust STL (statsmodels 0.14.6), fitted per window on training data only. Strategies Direct, STL-SN, STL-AC. STL failure is a failure; no fallback decomposition. & Fixes F2. & Protocol \\
+D10 & Models & The 12 models: ARIMA, SARIMA ($D=1$), ETS; Ridge, LinearRegression, RandomForest, XGBoost; NLinear, NHITS, LSTM; TFT, PatchTST. & Design and text stay aligned. & Team \\
+D11 & Statistical & AutoARIMA with approximate stepwise search, AutoARIMA with $D=1$, AutoETS (statsforecast 2.0.3); specification chosen per series by information criteria. & As in the valid May run; regression test I2 stays exact. & Team \\
+D12 & Global tuning & Library Auto classes with Optuna (TPE); 20 trials per study; the slowest family may drop to 15 only if the pilot projects an overrun, recorded before any real run. Objective: mean validation MASE. & Fixes C2; MASE is scale-free and native. & Team \\
+D13 & Tuning set & Fixed draw of 600 per source from the eligible pool; pre-window-0 data only; validation = one block, the last $h$ points before the first cutoff. One study per model $\times$ frequency $\times$ target (raw, $T{+}R$, and $T$, $S$, $R$ separately): 90 studies. Best configuration frozen to a hashed file. & Tuning never sees test data; each STL-AC component model is tuned for its own target. & Team \\
+D14 & Search spaces & Table~\ref{tab:spaces}; fixed a priori; identical for every pool; include scaling and training length. & P3; fixes C4, M5. & Protocol \\
+D15 & Training scopes & Cohort: one global model per feature sample $\times$ frequency, M3 and M4 pooled (1,200 series). Tercile: one per bucket ($\approx 400$). Same frozen configuration, same series, same windows; temporal hold-out on the same series. & Fully paired design; corrects the ``held-out series'' wording (M3). & Team \\
+D25 & ML inputs & Lags $1,\dots,m$; target transform tuned (none, local scaling, first difference, seasonal difference); no calendar or rolling features. & Same information as a seasonal autoregression; STL's contribution measured cleanly. & Team \\
+\multicolumn{5}{@{}l}{\emph{Execution}}\\
+D16 & Failures & No fallback code. Statistical per-series failures recorded as failed rows. A global task is retried once; a second failure is fixed in a committed change and that task alone is rerun with the same manifest and configurations, logged. & P5; fixes C1, m2. & Team \\
+D17 & Seeds & One fixed seed per fit. Seed check: evolving seasonality, cohort scope, the 7 stochastic global models, 2 extra seeds (A15). & Quantifies seed sensitivity at modest cost. & Team \\
+D18 & Statistical cache & Statistical forecasts computed once per series $\times$ window $\times$ strategy $\times$ model, reused across feature samples. & Pool-independent; saves compute; identical values. & Protocol \\
+D19 & Provenance & Every row stores code commit, environment-lock hash, data checksum, manifest hash, configuration hash, backend and version, and --- for STL-AC --- all three component provenances. & Fixes m1, F3. & Protocol \\
+D20 & Infrastructure & Four GPU machines, sharded by family $\times$ frequency; outputs and logs synced continuously to a cloud bucket via rclone, with checksums. & Survives instance loss; merge refuses mismatched hashes. & Team \\
+D22 & Code \& environment & A new dedicated git repository for the pipeline; the May library versions pinned in a committed lockfile (Section~\ref{sec:env}). & Clean history, shareable with the partner; regression test valid. & Team \\
+\multicolumn{5}{@{}l}{\emph{Analysis}}\\
+D21 & Metrics & Primary: $\RN$. Secondary: unclipped RelNaive, MASE, sMAPE, POCID. & Continuity with the paper. & Team \\
+D23 & Inference & Series-level Wilcoxon signed-rank with Holm correction per predefined table; multiple comparison matrices; Friedman + Nemenyi critical-difference rankings for cohort (36 configurations) and tercile (27) scopes, overall and per frequency; bootstrap CIs; ordered-trend tests. & Section~\ref{sec:analysis}. & Team \\
+D26 & Practical threshold & An effect is a \emph{gain} or \emph{loss} only if Holm-significant and $|$median per-series $\Delta| \geq 0.01$; significant but smaller effects are \emph{negligible}. & With $\sim$10$^6$ rows almost everything is significant. & Team \\
+D27 & Aggregation & Descriptives at instance level; inference at distinct-series level; families weighted equally when pooled. & Paper's convention; no series or family counted twice. & Team \\
+D28 & Selector & No feature-based selector in this paper; stated as a limitation and left to the follow-up. & Scope. & Team \\
+\multicolumn{5}{@{}l}{\emph{Process}}\\
+D24 & Freeze & Protocol committed and tagged in the pipeline repository before stage R1; later changes only via the change log. & Prevents result-driven changes. & Team \\
+D29 & Release & Code, manifest and frozen result bundle released with the paper. & Every table and figure regenerable by reviewers. & Team \\
+D30 & Sign-off & The supervisor approves the protocol before implementation and the pilot's go / no-go; the partner university is informed. & Accountability at both gates. & Team \\
+\end{longtable}
+}
+
+%=====================================================================
+\section{Data, eligibility, features and sampling}\label{sec:data}
+%=====================================================================
+
+\subsection{Data}
+
+M3 and M4 monthly and quarterly series are downloaded once with \code{datasetsforecast} 1.0.1,
+stored in the cloud bucket together with SHA-256 checksums, and loaded from that frozen copy on
+every machine (D2). The checksum is written into the manifest and every result row. Loading verifies
+it and refuses a mismatch (test U18).
+
+\subsection{Eligibility and the minimum-length constraint}\label{sec:eligibility}
+
+With $W=3$ windows of step $h$, the history available before the first test window is $n - 3h$.
+Table~\ref{tab:minlen} lists every requirement on that history. The eligibility rule $L = 3m+h$
+satisfies all modelling requirements. The only conflicts were the quarterly guards of nonlinearity
+and ARCH, resolved by D5.
+
+\begin{table}[h]
+\centering\small
+\caption{Minimum pre-window-0 length required by each component.}\label{tab:minlen}
+\begin{tabular}{@{}lrrl@{}}
+\toprule
+Requirement & Monthly & Quarterly & Source \\
+\midrule
+STL with $\geq 2$ seasons in the tuning data (pre-window-0 minus $h$) & 42 & 16 & D3 \\
+ML lags $\leq m$ plus seasonal differencing at the tuning origin & 42 & 16 & D25 \\
+Evolving seasonality: $\geq 2$ rolling windows (window + step) & 42 & 18 & feature code \\
+Non-normality test & 20 & 20 & feature code \\
+Structural breaks & 48 & 20 & feature code \\
+ARCH test (quarterly: original 24, lowered by D5) & 48 & 20 & feature code \\
+Nonlinearity (quarterly: original 30, lowered by D5) & 48 & 20 & feature code \\
+\midrule
+\textbf{Eligibility rule $L = 3m+h$} & \textbf{54} & \textbf{20} & D3 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Table~\ref{tab:eligible} gives the eligible pool under the adopted option and the alternatives that
+were considered, estimated from the 25 May run's cutoffs; exact counts are produced by stage R1.
+
+\begin{table}[h]
+\centering\small
+\caption{Estimated eligible series. A (adopted): three windows, quarterly guards lowered to 20.
+B: two quarterly windows, guards of 24. C: three windows, original guards (30). D: three windows,
+guards of 24. Monthly figures are the same under every option, because the monthly rule (54)
+already exceeds every monthly guard (48).}\label{tab:eligible}
+\begin{tabular}{@{}lrrrrr@{}}
+\toprule
+Source & Pool & A (adopted) & B & C & D \\
+\midrule
+M3 Monthly   & 1,428  & 1,040  & 1,040  & 1,040  & 1,040 \\
+M3 Quarterly & 756    & \textbf{634} & 666 & 116 & 433 \\
+M4 Monthly   & 48,000 & 35,000 & 35,000 & 35,000 & 35,000 \\
+M4 Quarterly & 24,000 & 22,500 & 23,400 & 20,100 & 20,700 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Under option A, nonlinearity and ARCH are computed on 20--29 points for the shortest quarterly
+series and are noisier there; analysis A7 repeats the feature results on the series that meet the
+original guards. M3 Quarterly is close to a census (600 of about 634 eligible series) and M3
+Monthly supplies 600 of about 1,040, so per-feature stratification is substantive only for M4. The
+paper states this.
+
+\subsection{Features}
+
+The six feature definitions of the paper are unchanged, with three changes to how they are computed
+(D4).
+\begin{enumerate}
+  \item Each feature is computed once, on $y_{1:n-3h}$, the history before the first test window.
+  Features and buckets are the same for all three windows.
+  \item Any series with a non-``ok'' quality flag on any feature is removed from the eligible pool,
+  so no fallback value ever enters a sample (fixes F1).
+  \item Features are computed for \emph{every} eligible series, about 59,000, so the follow-up
+  meta-learning paper has all six features for every eligible series.
+\end{enumerate}
+
+\subsection{Sampling}\label{sec:sampling}
+
+For each feature $k$, frequency and source independently:
+\begin{enumerate}
+  \item Rank the eligible series by $\phi_k$ (ties broken by series id).
+  \item Cut the ranking into 30 equal-count strata.
+  \item Draw $600/30 = 20$ series per stratum without replacement, seed $= s_0 + k$.
+  \item Record the stratum, rank and quantile of every selected series in the manifest.
+\end{enumerate}
+Each feature sample holds 600 series per source: 1,200 per frequency and 2,400 in total. Across
+the six features, about 8,500 distinct series are expected. M4 samples are nearly disjoint; M3
+samples overlap heavily. Sampling quality is checked by gate G11.
+
+\subsection{Buckets}
+
+Within each feature sample and frequency, the 1,200 series are split at the empirical 1/3 and 2/3
+quantiles into Low, Medium and High, about 400 each. If any populated bucket holds less than 20\%
+of the sample, the feature is flagged degenerate for that frequency (gate G12). It is then run with
+its populated buckets only and excluded from the tercile-trend tests (H4). The nonlinearity
+feature keeps its floored definition (D7) and is expected to trigger this guard, as documented in
+the paper's Section 4.5.
+
+\subsection{The manifest}
+
+Stage R1 writes one manifest bundle, which is hashed and frozen. It contains:
+\begin{itemize}
+  \item the data checksum;
+  \item the eligibility table for the full pool (length, flags, eligible yes/no);
+  \item feature values for all eligible series;
+  \item the six feature samples with strata and seeds;
+  \item bucket assignments;
+  \item the tuning set;
+  \item the cutoffs for all windows.
+\end{itemize}
+Nothing downstream re-samples, re-buckets or recomputes cutoffs.
+
+%=====================================================================
+\section{Forecasting setup}\label{sec:forecasting}
+%=====================================================================
+
+\subsection{Validation and decomposition}
+
+For series $i$ and window $w \in \{0,1,2\}$, the training set ends at $n_i - (3-w)h$ and the test
+set is the next $h$ points. Every model --- statistical and global --- is refitted for every
+window (D8). STL is fitted on each window's training data only. Its three strategies are:
+\begin{itemize}
+  \item \textbf{Direct:} the model forecasts the raw series.
+  \item \textbf{STL-SN:} a model forecasts $T+R$, and the last seasonal cycle of $S$ is repeated and
+  added back.
+  \item \textbf{STL-AC:} one separately trained model per component, and the forecasts are summed.
+\end{itemize}
+
+\subsection{Models and classes}
+
+\begin{table}[h]
+\centering\small
+\caption{Model classes used in each phase.}\label{tab:models}
+\begin{tabularx}{\linewidth}{@{}l l l X l@{}}
+\toprule
+Family & Model & Tuning phase & Evaluation phase & Type \\
+\midrule
+Statistical & ARIMA & --- (IC selection) & \code{AutoARIMA(season_length=m)}, approximate & local \\
+Statistical & SARIMA & --- & \code{AutoARIMA(season_length=m, D=1)}, approximate & local \\
+Statistical & ETS & --- & \code{AutoETS(season_length=m)} & local \\
+ML & Ridge / LinReg / RF / XGBoost & \code{AutoMLForecast} + model spaces & \code{MLForecast} with frozen config & L / L / NL / NL \\
+Neural & NLinear, NHITS, LSTM & \code{AutoNLinear}, \code{AutoNHITS}, \code{AutoLSTM} & plain classes, frozen config & L / NL / NL \\
+Transformer & TFT, PatchTST & \code{AutoTFT}, \code{AutoPatchTST} & plain classes, frozen config & NL / NL \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+The Auto classes are used only in the tuning phase. The evaluation phase instantiates the plain
+classes from the frozen configuration file, so every evaluation forecast is fully determined by that
+file. The Auto class names and signatures are verified in the pinned environment on day 1 (test I5),
+because the libraries are not installed on the development machine.
+
+\subsection{Tuning protocol}\label{sec:tuning}
+
+\begin{itemize}
+  \item \textbf{Data:} the tuning set (D13), truncated at each series' first cutoff. The last $h$
+  points form a single validation block; the rest is training data. No tuning step sees a test
+  period (gate G7).
+  \item \textbf{Studies:} one per global model $\times$ frequency $\times$ target, i.e.\
+  $9 \times 2 \times 5 = 90$. The five targets are the raw series (Direct), $T+R$ (STL-SN), and $T$,
+  $S$, $R$ separately (STL-AC). 50 studies run on GPU (neural and transformer) and 40 on CPU (ML).
+  \item \textbf{Search:} Optuna TPE sampler, 20 trials, fixed sampler seed. If the pilot projects
+  an overrun, the slowest family may drop to 15 trials; the change is recorded before any real run
+  (D12). Studies are stored in SQLite and archived.
+  \item \textbf{Objective:} mean validation MASE with seasonality $m$. NeuralForecast is configured
+  with \code{valid_loss=MASE(seasonality=m)}; AutoMLForecast with an equivalent loss function.
+  \item \textbf{Early stopping:} used during tuning only. In evaluation, the number of training steps
+  is part of the frozen configuration, since no validation data exists after a test cutoff.
+  \item \textbf{Freezing:} the best trial of each study is written to \code{configs_frozen.json},
+  whose SHA-256 hash is stored in every result row. Tercile-scope models use exactly the same
+  configuration as cohort-scope models (D15).
+\end{itemize}
+
+\begin{table}[h]
+\centering\small
+\caption{Search spaces (D14). They are identical for every pool. The pilot may only \emph{narrow}
+a space for feasibility, and any such change goes into the change log.}\label{tab:spaces}
+\begin{tabularx}{\linewidth}{@{}l X@{}}
+\toprule
+Scope & Space \\
+\midrule
+All neural and transformer & \code{input_size}: monthly $\{18, 36\}$, quarterly $\{8, 16\}$; \code{scaler_type} $\in$ \{identity, standard, robust\}; learning rate log-uniform $[10^{-4}, 10^{-2}]$; \code{max_steps} $\in \{500, 1000, 2000\}$; batch size $\in \{32, 64\}$; \code{start_padding_enabled}=True (fixed). \\
+NLinear & common parameters only \\
+NHITS & \code{n_pool_kernel_size} $\in$ \{[2,2,1], [1,1,1]\}; \code{n_freq_downsample} $\in$ \{[4,2,1], [1,1,1]\}; MLP units $\in$ \{2$\times$64, 2$\times$256\} \\
+LSTM & encoder hidden $\in \{32, 64, 128\}$; encoder layers $\in \{1, 2\}$; decoder hidden $\in \{32, 64\}$ \\
+TFT & hidden size $\in \{32, 64, 128\}$; heads $\in \{2, 4\}$; dropout $\in \{0, 0.1, 0.2\}$ \\
+PatchTST & hidden size $\in \{32, 64, 128\}$; heads $\in \{4, 8\}$; encoder layers $\in \{1, 2, 3\}$; patch length $\in \{4, 8\}$, capped at \code{input_size}; stride = patch length / 2 \\
+All ML (D25) & lags $1,\dots,m$ (fixed); target transform $\in$ \{none, local standard scaling, first difference, seasonal difference\}; no calendar or rolling features \\
+Ridge & $\alpha$ log-uniform $[10^{-3}, 10^{2}]$ \\
+LinearRegression & target transform only \\
+RandomForest & trees $\in \{100, 300\}$; max depth $\in$ \{none, 10, 20\}; min samples per leaf $\in \{1, 5, 20\}$; max features $\in$ \{1.0, 0.5, sqrt\} \\
+XGBoost & trees $[100, 600]$; learning rate log-uniform $[0.01, 0.3]$; max depth $[3, 9]$; subsample $[0.6, 1]$; column sample $[0.6, 1]$ \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{Training scopes and pairing}
+
+For each feature sample, frequency, strategy, model and window, the cohort model is trained on all
+1,200 series of that frequency --- M3 and M4 pooled --- and the three tercile models on about 400
+each. All four use the same frozen configuration and are evaluated on the same series and windows.
+Every tercile forecast therefore has exactly one cohort twin, and gate G6 enforces this. $\dft$
+isolates the effect of the narrower training pool.
+
+Statistical models appear only in the cohort scope. Their forecasts do not depend on the pool, so
+they are computed once per series, window, strategy and model and reused across feature samples
+(D18).
+
+\subsection{Failure semantics and determinism}
+
+\begin{itemize}
+  \item \textbf{No fallback forecaster.} \code{baselines.py}, the component stub and the
+  per-task jitter are deleted. The result object rejects any source other than \code{trained_*}
+  (test U9).
+  \item \textbf{Statistical models:} a per-series exception produces a \emph{failed row} with the
+  exception class and message, and no forecast. The task continues.
+  \item \textbf{Global models:} an exception fails the whole task, which is retried once
+  automatically. If it fails again, the cause is fixed in a committed code change and only that
+  task is rerun, with the same manifest and configurations; the change log records it (D16).
+  \item \textbf{STL-AC:} if any of the three component models fails, the row fails. All three
+  component provenances are stored.
+  \item \textbf{Seeds:} one fixed seed per fit, with deterministic backend flags where available.
+  Forecast hashes are stored so that any rerun can be compared exactly. Seed sensitivity is
+  measured by the seed check (D17, A15).
+\end{itemize}
+
+\subsection{Code, environment and data}\label{sec:env}
+
+The pipeline moves to a new dedicated git repository; the paper repository records the commit that
+produced the results (D22). The environment is pinned to the versions of the valid May runs:
+Python 3.11.10, torch 2.5.1+cu121, mlforecast 1.0.31, neuralforecast 3.1.8, statsforecast 2.0.3,
+optuna 4.8.0, statsmodels 0.14.6, scikit-learn 1.8.0, numpy 2.4.6, pandas 2.3.3, scipy 1.15.3,
+ruptures 1.1.10 and datasetsforecast 1.0.1. A lockfile is committed and its hash is stored in every
+row. The same image is used on every machine, and all machines load the frozen data copy (D2).
+
+%=====================================================================
+\section{Measurement and analysis plan}\label{sec:analysis}
+%=====================================================================
+
+This section is frozen before the full run (D24). The analysis code implements it and is tested on
+pilot data first (I3).
+
+\subsection{What is recorded}
+
+\begin{itemize}
+  \item \textbf{Per forecast row} (task $\times$ series $\times$ window): forecast and
+  seasonal-naive vectors; $\RN$ and unclipped RelNaive; MASE, sMAPE, MAE, POCID; the keys (feature
+  sample, frequency, strategy, family, model, scope, bucket, series, source, window, cutoff, seed);
+  training and inference time; status (trained / failed) with the failure reason; and the full
+  provenance of D19.
+  \item \textbf{Per series:} length, eligibility, all six features with flags, sample membership,
+  stratum, bucket per feature.
+  \item \textbf{Per tuning study:} every trial's parameters, validation MASE and duration; the best
+  configuration; the SQLite study file.
+  \item \textbf{Per run:} task-level logs, heartbeat, resource usage, gate reports.
+\end{itemize}
+
+\subsection{Derived quantities and aggregation rules}
+
+\begin{itemize}
+  \item \textbf{Instance:} (feature sample, series, window, model, strategy, scope, seed).
+  \item $\dstl = \RN_{\text{Direct}} - \RN_{\text{STL}}$, paired on everything except the
+  strategy. $\dft = \RN_{\text{cohort}} - \RN_{\text{tercile}}$, paired on everything except the
+  scope. Positive values mean the treatment helps.
+  \item \textbf{Descriptives} (mean of capped values, median, win rate = share of instances with
+  $\Delta > 0$, tie share) are computed at the \emph{instance} level. This keeps the convention of
+  the current paper (D27).
+  \item \textbf{Inference} is at the \emph{distinct-series} level. A series' value is its mean over
+  the instances in the reporting group --- windows, models and, where a series appears in several
+  feature samples, those samples. No series is counted twice.
+  \item \textbf{Family pooling:} when families are pooled, each family is weighted equally (mean of
+  family means), so the four-model ML family does not outweigh the two transformers (D27).
+  \item \textbf{Seed check:} only the main seed enters H1--H7; the extra seeds are used by A15 only.
+  \item \textbf{Failures:} pairwise deletion. Every table reports the number of excluded instances.
+\end{itemize}
+
+\subsection{Practical significance}\label{sec:practical}
+
+With about $2.8 \times 10^6$ forecast rows, almost every difference is statistically significant.
+Every confirmatory contrast is therefore labelled by the rule of D26:
+\begin{itemize}
+  \item \textbf{Gain / loss:} Holm-significant and $|\text{median per-series } \Delta| \geq 0.01$,
+  i.e.\ at least 1\% of the seasonal-naive error, in the direction of the sign.
+  \item \textbf{Negligible:} Holm-significant but $|\text{median per-series } \Delta| < 0.01$.
+  \item \textbf{No evidence:} not significant after Holm correction.
+\end{itemize}
+For H4 the contrast is the difference in median per-series $\dstl$ between the High and Low
+terciles; for H6 it is the median of the per-series paired difference. The paper uses these three
+labels verbatim; ``gain'' is never used for a negligible effect.
+
+\subsection{Confirmatory hypotheses}
+
+All tests are two-sided at $\alpha = 0.05$, with Holm correction within the stated family of tests.
+Effect sizes are reported with every test: the median per-series $\Delta$ with a 95\% bootstrap
+confidence interval (2,000 resamples of series) and the matched-pairs rank-biserial correlation.
+
+{\small
+\begin{longtable}{@{}p{0.6cm} p{5.1cm} p{5.1cm} p{4.0cm}@{}}
+\toprule
+ID & Question & Test and unit & Correction family \\
+\midrule
+\endfirsthead
+\toprule
+ID & Question & Test and unit & Correction family \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+H1 & Does STL change accuracy, per family and strategy (cohort scope)? & Wilcoxon signed-rank on per-series $\dstl$ & Holm: 4 families $\times$ 2 strategies = 8 \\
+H2 & Does the STL effect differ between families? & Paired Wilcoxon on per-series $\dstl$ between families (same series) & Holm: 6 pairs $\times$ 2 strategies = 12 \\
+H3 & Which strategy is best within each family? & Paired Wilcoxon on $\RN$, Direct vs STL-SN vs STL-AC; shown as multiple comparison matrices & Holm: 3 pairs $\times$ 4 families = 12 \\
+H4 & Does the STL effect vary with each feature? & (a) Jonckheere--Terpstra trend test of per-series $\dstl$ across Low $<$ Medium $<$ High; (b) Spearman $\rho$ between feature value and per-series $\dstl$, bootstrap CI. Family-balanced pooling; per family as secondary. & Holm: 6 features $\times$ 2 strategies = 12 per test type \\
+H5 & Does bucket specialisation change accuracy, per family and strategy? & Wilcoxon on per-series $\dft$ & Holm: 3 families $\times$ 3 strategies = 9 \\
+H6 & Do linear and non-linear models respond differently to specialisation? & Paired Wilcoxon on per-series [mean $\dft$ of non-linear models $-$ mean $\dft$ of linear models] & Holm: 3 strategies = 3 \\
+H7 & Do configurations differ in overall rank? & Friedman test on per-series mean $\RN$ with distinct series as blocks, then Nemenyi post-hoc and critical-difference diagrams: cohort scope (36 configurations = 12 models $\times$ 3 strategies) and tercile scope (27 = 9 $\times$ 3), each overall and per frequency --- six diagrams. & Nemenyi's own family-wise control within each diagram \\
+\end{longtable}
+}
+
+For H7, the critical difference shrinks with the number of blocks, so with thousands of series
+most pairs will be separated in rank. A rank difference is read as practically meaningful only
+where the corresponding paired contrast also meets the D26 threshold.
+
+\subsection{Secondary and robustness analyses}
+
+\begin{description}[leftmargin=1.1cm,style=sameline,font=\normalfont\bfseries]
+  \item[A1] Model standing: $\RN$ by family $\times$ model $\times$ strategy $\times$ scope; top
+  configurations; distributions.
+  \item[A2] Frequency split: H1, H4 and H5 repeated for monthly and quarterly separately.
+  \item[A3] Source split: M3 vs M4.
+  \item[A4] Window consistency: sign and size of $\dstl$ and $\dft$ per window.
+  \item[A5] Metric sensitivity: H1 and H5 on MASE, sMAPE and unclipped median RelNaive.
+  \item[A6] Cap sensitivity: means at caps 5, 10 and 20, and 5\% trimmed means.
+  \item[A7] Guard sensitivity (D5): H4 for nonlinearity and ARCH restricted to quarterly series with
+  $\geq 30$ and $\geq 24$ pre-window-0 points respectively.
+  \item[A8] Failure accounting by family, model, strategy and scope.
+  \item[A9] Compute cost: training and inference time by family and strategy.
+  \item[A10] Tuning report: frozen configurations, trial curves, best vs first trial.
+  \item[A11] Sampling quality: Kolmogorov--Smirnov distance between sample and eligible pool per
+  feature and source.
+  \item[A12] Bucket support and degenerate-feature report.
+  \item[A13] Per-model tables for $\dstl$ and $\dft$.
+  \item[A14] Correlations between the six features on the eligible pool.
+  \item[A15] Seed sensitivity (D17): for evolving seasonality in the cohort scope, the spread of
+  per-series $\RN$ across three seeds for the seven stochastic global models, and whether any H1 or
+  H3 label (gain / loss / negligible / no evidence) changes when another seed is used.
+\end{description}
+
+\subsection{Tables and figures, mapped to the paper}
+
+\begin{table}[h]
+\centering\small
+\caption{Outputs produced by the analysis package. All are generated by committed scripts from the
+frozen result bundle.}\label{tab:outputs}
+\begin{tabularx}{\linewidth}{@{}l X l@{}}
+\toprule
+Paper section & Output & Analysis \\
+\midrule
+\S2 Data & Pool / eligible / sampled counts; sampling illustration; KS table & D3, A11 \\
+\S2 Models & Model table; search spaces; frozen configurations (appendix) & D10--D14, A10 \\
+\S2 Features & Feature distributions; bucket sizes with support check & A12, A14 \\
+\S3.1 & Top configurations per scope; $\RN$ distributions by family $\times$ strategy; cohort-scope critical-difference diagrams & A1, H7 \\
+\S3.2 & $\dstl$ by family $\times$ strategy with CIs and D26 labels; bar chart; MCM per family & H1--H3 \\
+\S3.3 & $\dstl$ by feature $\times$ tercile (per strategy); trend and Spearman tables; family heatmap & H4, A7 \\
+\S4 & $\dft$ overall, by bucket, family, model, strategy; linear vs non-linear; significance counts; tercile-scope critical-difference diagrams & H5--H7, A13 \\
+Appendix & Frequency, source, window, metric, cap and seed robustness; failures; compute cost & A2--A9, A15 \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+%=====================================================================
+\section{Implementation plan}\label{sec:impl}
+%=====================================================================
+
+\subsection{From scratch or from the current code}
+
+\begin{table}[h]
+\centering\small
+\caption{Rewrite versus refactor.}\label{tab:scratch}
+\begin{tabularx}{\linewidth}{@{}l X X@{}}
+\toprule
+ & From scratch & Refactor the current code (adopted) \\
+\midrule
+For & No hidden legacy path survives; cleaner architecture. & STL, split, metric, features, checkpointing and vast.ai scripts are already correct and tested; feature code \emph{is} the paper's definition. \\
+Against & Four days is not enough to rebuild and re-test loading, features, checkpointing and orchestration; new bugs; features must be re-validated against the old definitions. & Every unsafe path must be found. Mitigated by deleting rather than disabling them, and by static test U9. \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+The current code is copied into the new dedicated repository, committed as a baseline, and
+refactored on a branch \code{rerun-v2}. Unsafe paths are deleted, not switched off; the non-strict
+mode ceases to exist.
+
+\subsection{Module-by-module changes}
+
+{\small
+\begin{longtable}{@{}p{4.6cm} p{7.4cm} p{3.3cm}@{}}
+\toprule
+File & Change & Fixes \\
+\midrule
+\endfirsthead
+\toprule
+File & Change & Fixes \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+\code{src/data/freeze_data.py} (new) & One-off download of M3/M4 into the cloud bucket with SHA-256 checksums. & D2 \\
+\code{src/data/load_m_datasets.py} & Load only from the frozen copy; verify checksums; refuse a mismatch. & D2 \\
+\code{src/data/eligibility.py} (new) & Eligibility table: length rule $L$, feature flags; refuses ineligible series downstream. & C4, M4, F1 \\
+\code{src/data/validation.py} & \code{make_cutoffs} asserts eligibility instead of skipping short windows. & M4 \\
+\code{src/features/compute_all.py} & Compute on $y_{1:n-3h}$ (line 66); a failed feature marks the series ineligible instead of writing default values. & C3, F1 \\
+\code{src/features/nonlinear.py}, \code{arch.py} & Quarterly guards lowered to 20 (D5). & D5 \\
+\code{src/features/mstl_features.py} & \code{decompose_series}: remove constant-trend and moving-average fallbacks; raise instead. & F2 \\
+\code{src/data/sample_series.py} & 600 per source from the eligible pool; per-feature seed; strata recorded; 20\% minimum-support guard in bucket assignment. & M2, D7 \\
+\code{src/models/baselines.py}, \code{component_wrappers.py} & Deleted. & C1 \\
+\code{src/models/*_auto.py} & Split into \code{tune()} (Auto classes, Optuna, MASE) and \code{fit_predict()} (plain classes with a frozen config). Remove \code{_safe_lags}, \code{_safe_input_size} and all fallback branches. & C2, C4 \\
+\code{src/models/statistical.py} & Approximate AutoARIMA kept; seasonal-naive fallback removed; per-series failures raise a recorded failure. & C1, m2 \\
+\code{src/models/forecast_result.py} & Accept only \code{trained_*} sources and \code{failed} status. & C1 \\
+\code{src/training/train_family.py} & Delete \code{_identity_scale}, \code{_apply_identity_adjustment} and \code{uid_not_in_global_result}; add component provenance, pairing keys, seed key and the statistical cache. & C1, m1, D17, D18 \\
+\code{src/training/tune.py} & Real tuning: study creation, SQLite storage, 20-trial budget, frozen-config file with hash. & C2 \\
+\code{src/training/strict_mode.py} & Removed; strictness is unconditional. & C1 \\
+\code{src/training/task_graph.py} & Scopes \{cohort, low, medium, high\} plus seed-check tasks; delete \code{finetune_by_feature_bucket} and per-series modes. & M1, D17 \\
+\code{src/training/run_experiment.py} & Split into stages \code{prepare}, \code{tune}, \code{evaluate}, \code{merge}, \code{gates}, \code{analyse}; hashes written at each stage; logs synced. & M1, m5 \\
+\code{src/training/scheduler.py} & Shard selection by family $\times$ frequency; idempotent per-task outputs; rclone sync to the bucket. & D20 \\
+\code{src/validation/gates.py} (new) & Gates G1--G13 (Section~\ref{sec:gates}). & m3 \\
+\code{src/analysis/} (new) & Replaces \code{rebuild_paper_data.py} and the scratch scripts: loading with gates, deltas, Wilcoxon + Holm, MCM, Friedman + Nemenyi, D26 labels, tables, figures. & m3, m4 \\
+\code{configs/rerun_v2.yaml} (new) & Encodes every decision in Section~\ref{sec:decisions}; the old budget modes that permit non-strict runs are removed. & --- \\
+\end{longtable}
+}
+
+\subsection{Command-line interface}
+
+\begin{verbatim}
+python -m src.cli freeze-data --out <bucket>/data        # once, before R1
+python -m src.cli prepare  --config configs/rerun_v2.yaml --run runs/v2
+python -m src.cli tune     --run runs/v2 --shard <family>-<frequency>
+python -m src.cli freeze   --run runs/v2          # writes configs_frozen.json + hash
+python -m src.cli evaluate --run runs/v2 --shard <family>-<frequency>
+python -m src.cli merge    --run runs/v2          # refuses mismatched hashes
+python -m src.cli gates    --run runs/v2          # G1-G13, blocks analysis on failure
+python -m src.cli analyse  --run runs/v2 --out <paper-repo>/results_v2
+\end{verbatim}
+
+%=====================================================================
+\section{Testing and verification}\label{sec:testing}
+%=====================================================================
+
+Three layers: unit tests on code, integration tests on end-to-end runs, and gates on every
+produced output. A failing gate blocks the next stage.
+
+\subsection{Unit tests}
+
+{\small
+\begin{longtable}{@{}p{0.7cm} p{10.8cm} p{3.6cm}@{}}
+\toprule
+ID & Asserts & Guards \\
+\midrule
+\endfirsthead
+\toprule
+ID & Asserts & Guards \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+U1 & Perturbing any value after the first cutoff leaves all six features unchanged. & C3 \\
+U2 & Series with fewer than $L$ pre-window-0 points are ineligible; \code{make_cutoffs} raises on them. & C4, M4 \\
+U3 & On synthetic series of length exactly $L$, all six features return ``ok''. & D5, F1 \\
+U4 & No sampled series carries a non-``ok'' feature flag. & F1 \\
+U5 & STL: decomposition raises on too-short input; $T+S+R = y$ to $10^{-9}$; components unchanged when test data is perturbed. & F2, C3 \\
+U6 & RelNaive, the cap and the seasonal naive match hand-computed examples. & metric \\
+U7 & Sampling is deterministic given the seed, draws 600 per source, fills strata quotas, and uses different seeds per feature. & M2 \\
+U8 & Tercile sizes differ by at most one; the 20\% support guard triggers on a degenerate synthetic feature. & D7 \\
+U9 & Static check: no module can produce a non-trained forecast source; \code{baselines.py} is absent; the result object rejects other sources. & C1 \\
+U10 & The same task run twice gives identical forecast hashes (CPU backends; neural with a fixed seed on CPU). & C1 jitter \\
+U11 & Instantiated models carry exactly the frozen configuration, whatever the composition of the pool. & C4, C2 \\
+U12 & Tuning data ends before each series' first cutoff; validation is the last $h$ points before it. & C2, C3 \\
+U13 & STL-AC rows store three component provenances; any component failure fails the row. & m1 \\
+U14 & Every tercile row has exactly one cohort twin; a missing twin fails the merge. & M1 \\
+U15 & Merge refuses shards with a mismatched manifest, configuration, code, environment or data hash. & M1, m3 \\
+U16 & Statistical forecasts are identical across feature samples for the same series and window. & D18 \\
+U17 & A statistical per-series exception yields a failed row and the task continues; a global exception fails the task with no forecast rows. & D16 \\
+U18 & Loading refuses data whose checksum differs from the frozen copy. & D2 \\
+U19 & Wilcoxon, Holm, Friedman, Nemenyi, Jonckheere--Terpstra and the D26 labelling match reference implementations and hand-computed toy cases. & D23, D26 \\
+\end{longtable}
+}
+
+{\sloppy\textbf{Existing tests.} Kept: \code{test_rel_naive}, \code{test_component_recomposition},
+\code{test_stl_no_leakage} (extended to U5), \code{test_checkpoint_resume},
+\code{test_checkpoint_schema}, \code{test_feature_parallel_cache}, \code{test_timing_provenance}.
+Updated: \code{test_representative_sampling}, \code{test_parallel_scheduler},
+\code{test_global_model_adapters}, \code{test_feature_scaling_bins}, \code{test_benchmark_correctness}.
+Rewritten: \code{test_feature_fallbacks} (fallback now means ineligible) and
+\code{test_strict_provenance} (no fallback path exists). Replaced: \code{test_honest_optuna_status},
+by U11 and U12.\par}
+
+\subsection{Integration tests}
+
+\begin{description}[leftmargin=1.1cm,style=sameline,font=\normalfont\bfseries]
+  \item[I1] \textbf{Smoke:} synthetic data, all families, one trial per study, CPU. The full chain
+  freeze-data $\rightarrow$ prepare $\rightarrow$ tune $\rightarrow$ freeze $\rightarrow$ evaluate
+  $\rightarrow$ merge $\rightarrow$ gates $\rightarrow$ analyse passes.
+  \item[I2] \textbf{Regression:} on the eligible subset of the 25 May strict run's manifest, the new
+  code reproduces its AutoARIMA and AutoETS Direct metrics row for row ($|\text{diff}| < 10^{-6}$).
+  \item[I3] \textbf{Analysis dry run:} the analysis package produces every table and figure of
+  Table~\ref{tab:outputs} from pilot outputs.
+  \item[I4] \textbf{Resume:} a task killed mid-run and resumed produces identical outputs.
+  \item[I5] \textbf{API check (day 1):} every class and argument in Table~\ref{tab:models} and
+  Section~\ref{sec:tuning} exists in the pinned environment.
+\end{description}
+
+\subsection{Output gates}\label{sec:gates}
+
+{\small
+\begin{longtable}{@{}p{0.7cm} p{10.4cm} p{4.0cm}@{}}
+\toprule
+ID & Passes if & Stage \\
+\midrule
+\endfirsthead
+\toprule
+ID & Passes if & Stage \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+G1 & Every forecast row is \code{trained_*}; failures appear only in the failure table. & merge \\
+G2 & All shards carry the frozen manifest hash. & merge \\
+G3 & All shards carry the frozen configuration hash. & merge \\
+G4 & All shards carry the same code commit (clean tree) and environment-lock hash. & merge \\
+G5 & Task grid complete: expected $-$ completed = listed failures; global tasks have no unresolved failures; statistical per-series failures $\leq 0.5\%$, else investigated. & merge \\
+G6 & Pairing complete for $\dstl$ (every STL row has a Direct twin) and $\dft$ (every tercile row has a cohort twin). & merge \\
+G7 & Logged feature and tuning end indices all precede the first cutoff. & prepare, tune \\
+G8 & No manifest series has fewer than $L$ pre-window-0 points. & prepare \\
+G9 & No NaN or infinite metric; share of capped RelNaive $\leq 2\%$. & merge \\
+G10 & STL-AC / STL-SN median training-time ratio in $[2, 4]$ per global family. & merge \\
+G11 & Kolmogorov--Smirnov $p \geq 0.01$ between sample and eligible pool for each feature and M4 source; M3 reported. & prepare \\
+G12 & Every populated bucket $\geq 20\%$ of its sample, or the feature is flagged degenerate. & prepare \\
+G13 & Every shard carries the frozen data checksum. & prepare, merge \\
+\end{longtable}
+}
+
+\subsection{Traceability}
+
+\begin{table}[h]
+\centering\small
+\caption{Every defect is closed by a decision, a test and a gate.}\label{tab:trace}
+\begin{tabular}{@{}lllll@{}}
+\toprule
+Defect & Decision & Unit tests & Integration & Gates \\
+\midrule
+C1 fallback stub, jitter & D16 & U9, U10, U17 & I1 & G1 \\
+C2 no tuning & D12--D14 & U11, U12 & I5 & G3 \\
+C3 feature leakage & D4 & U1, U5 & --- & G7 \\
+C4 pool-dependent configs & D3, D14, D25 & U2, U11 & --- & G8 \\
+M1 unpaired arms & D15, D20 & U14, U15 & I1 & G2, G6 \\
+M2 no stratification & D6 & U7 & --- & G11 \\
+M3 ``held-out series'' & D15 & --- & --- & paper text \\
+M4 short histories & D3 & U2 & --- & G8 \\
+M5 thin neural training & D14 & U11 & --- & --- \\
+F1 feature fallback values & D4, D5 & U3, U4 & --- & G8 \\
+F2 STL fallback & D9 & U5 & --- & --- \\
+F3 code not versioned & D22 & --- & --- & G4 \\
+m1 component provenance & D19 & U13 & --- & --- \\
+m3 unchecked merge & D20 & U15 & I3 & G2--G6, G13 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+%=====================================================================
+\section{Pilot}\label{sec:pilot}
+%=====================================================================
+
+\subsection{Scope}
+
+\begin{itemize}
+  \item Two features: evolving seasonality (the strongest earlier signal) and nonlinearity (it
+  exercises the degenerate-bucket guard).
+  \item Both frequencies; 100 series per source per feature (400 per feature).
+  \item All 12 models, 3 strategies, 4 scopes, 3 windows, main seed only.
+  \item Tuning: all 90 studies with 3 trials each, on a tuning set of 100 per source.
+  \item One GPU machine, the same image and frozen data copy as the full run.
+\end{itemize}
+
+\subsection{What the pilot must show}
+
+\begin{enumerate}
+  \item All unit and integration tests pass, including I2 (regression) and I3 (analysis dry run).
+  \item All gates G1--G13 pass on the pilot outputs, with G12 flagging nonlinearity as expected.
+  \item Measured time per task and per trial, by family, frequency and strategy. These replace the
+  estimates of Section~\ref{sec:runs} and set the shard allocation.
+  \item Peak GPU memory per model at the largest configuration in each search space.
+  \item Failure rate by family, with every failure explained.
+\end{enumerate}
+
+\subsection{Exit criteria (go / no-go)}
+
+\textbf{Go} if all tests and gates pass, there is no unexplained failure, and the projected
+wall-clock time of the full run on four machines is at most three days. The supervisor takes the
+go / no-go decision (D30). The only permitted adjustments before going are:
+\begin{itemize}
+  \item narrowing a search space for memory or time;
+  \item reducing trials from 20 to 15 for the slowest family (D12);
+  \item re-balancing shards.
+\end{itemize}
+Each adjustment is recorded in the change log. Results from the pilot are never reported.
+
+%=====================================================================
+\section{Full runs}\label{sec:runs}
+%=====================================================================
+
+\subsection{Stages}
+
+{\small
+\begin{longtable}{@{}p{1.0cm} p{2.6cm} p{7.4cm} p{4.0cm}@{}}
+\toprule
+Stage & Name & Content & Output (frozen) \\
+\midrule
+\endfirsthead
+\toprule
+Stage & Name & Content & Output (frozen) \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+R0 & Freeze code & Tag the commit (with the signed-off protocol); build and hash the environment image; data copy already frozen. & commit tag, image hash, data checksum \\
+R1 & Prepare (CPU) & Eligibility on the full pool; features on pre-window-0 data for all eligible series (about 59,000); six samples; buckets; tuning set; cutoffs. Gates G7, G8, G11, G12, G13. & manifest bundle + hash \\
+R2 & Tune & 90 studies, sharded (50 GPU, 40 CPU). Gate G7. & study files \\
+R2b & Freeze configs & Best trial per study written and hashed. & \code{configs_frozen.json} + hash \\
+R3 & Evaluate & Up to 1,488 tasks, sharded; statistical cache shared; cohort shards first, then tercile, then seed check. Each shard is validated on completion. & shard outputs + logs \\
+R4 & Merge + gates & Merge; G1--G6, G9, G10, G13. Retry or fix any failed global task (D16). & result bundle + hash \\
+R5 & Analyse & Analysis package on the frozen bundle. & tables, figures, reports \\
+\end{longtable}
+}
+
+\subsection{Task grid}
+
+\begin{itemize}
+  \item \textbf{Cohort scope:} $6 \text{ features} \times 2 \text{ frequencies} \times 3
+  \text{ strategies} \times 12 \text{ models} = 432$ tasks. Of these, 108 are statistical and are
+  served by the cache.
+  \item \textbf{Tercile scope:} $6 \times 2 \times 3 \times 9 \times 3 \text{ buckets} = 972$
+  tasks. This falls to 918 if nonlinearity has an empty Medium bucket in both frequencies.
+  \item \textbf{Seed check:} $1 \text{ feature} \times 2 \times 3 \times 7 \text{ stochastic models}
+  \times 2 \text{ extra seeds} = 84$ tasks. Ridge and LinearRegression are deterministic and
+  excluded.
+  \item \textbf{Total:} up to 1,488 tasks, about 2.8 million forecast rows.
+\end{itemize}
+
+\subsection{Compute estimate and allocation}
+
+The basis is the previous runs on one machine with 64 cores, one 24\,GB GPU and fixed small
+configurations: 288 cohort-style tasks in about 12 hours, and 972 tercile tasks in about 50 hours.
+At the new task count this is about 70 machine-hours. Tuned configurations may cost 1.5--3 times
+more, giving roughly 105--210 machine-hours of evaluation. Tuning adds 50 GPU studies $\times$ 20
+trials at an estimated 0.5--3 minutes each, i.e.\ 8--50 GPU-hours, plus CPU studies in parallel.
+
+Initial allocation of the four machines (D20), re-balanced from the pilot's measured times:
+\begin{itemize}
+  \item machine A: neural monthly;
+  \item machine B: neural and transformer quarterly;
+  \item machine C: transformer monthly;
+  \item machine D: ML and statistical, both frequencies (CPU-bound).
+\end{itemize}
+Expected wall-clock time: tuning 2--13 hours, evaluation 26--53 hours.
+
+\subsection{Monitoring, failures and archival}
+
+\begin{itemize}
+  \item Heartbeat and status every minute; checkpoints every five minutes.
+  \item Outputs and logs synced to the cloud bucket at every checkpoint via rclone, with checksums,
+  so no machine holds the only copy (D20).
+  \item A failed global task is retried once automatically. A second failure is investigated; the
+  fix is committed, and the task alone is rerun with the same manifest and configuration (D16).
+  \item \textbf{Priority:} cohort-scope shards (Experiment 1) run first, tercile-scope shards
+  second and the seed check last, so an overrun cannot leave the main result incomplete.
+  \item \textbf{Archival:} SHA-256 checksums of every file. The final bundle is read-only; every
+  number in the paper is generated from it by committed scripts, and code, manifest and bundle are
+  released with the paper (D29).
+\end{itemize}
+
+%=====================================================================
+\section{Timeline}\label{sec:timeline}
+%=====================================================================
+
+Day 1 is the day of supervisor sign-off; the dates assume Tuesday 29 September 2026.
+
+\begin{table}[h]
+\centering\small
+\caption{Two-week plan.}\label{tab:timeline}
+\begin{tabularx}{\linewidth}{@{}l l X@{}}
+\toprule
+Day & Date & Work \\
+\midrule
+1 & Tue 29 Sep & Supervisor sign-off. New repository; baseline commit; branch \code{rerun-v2}; environment lockfile; I5 API check; frozen data copy with checksums (U18). \\
+2 & Wed 30 Sep & Eligibility, pre-window-0 features, sampling, buckets, manifest (U1--U8). \\
+3 & Thu 1 Oct & Model wrappers split into tune / fit; stubs and jitter deleted; strict failures; provenance; seed keys (U9--U13, U16, U17). \\
+4 & Fri 2 Oct & Task graph with scopes and seed check; sharding; merge; gates; analysis package incl.\ Friedman / Nemenyi and D26 labels, tested on synthetic data (U14, U15, U19, I1, I4). \\
+5 & Sat 3 Oct & Pilot on one GPU; I2, I3; gates; cost projection; go / no-go by the supervisor. \\
+6 & Sun 4 Oct & R0; R1 (prepare); start R2 (tuning) on four machines. \\
+7 & Mon 5 Oct & Finish R2; R2b freeze; start R3 (evaluation), cohort shards first. \\
+8--9 & Tue 6 -- Wed 7 Oct & R3; validate shards as they finish. \\
+10 & Thu 8 Oct & R4 merge and gates; fix and rerun any failed task; buffer. \\
+11 & Fri 9 Oct & R5 analysis; tables and figures. \\
+12--14 & Sat 10 -- Mon 12 Oct & Rewrite methods and results; supervisor review. \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+The critical path is days 1--5. A one-day slip in implementation removes one day of writing. The
+pilot's go / no-go falls on a Saturday; if the supervisor is not available that day, R0 and R1 may
+start, since they do not depend on the decision, but tuning waits for it. A no-go costs one to two
+days and is escalated to the supervisor the same day.
+
+%=====================================================================
+\section{Risks}\label{sec:risks}
+%=====================================================================
+
+{\small
+\begin{longtable}{@{}p{4.6cm} p{2.0cm} p{8.6cm}@{}}
+\toprule
+Risk & Likelihood & Mitigation \\
+\midrule
+\endfirsthead
+\toprule
+Risk & Likelihood & Mitigation \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+Auto-class APIs differ in the pinned versions & medium & I5 on day 1. Fallback: an Optuna loop around the plain classes with the same spaces and objective, recorded in the change log. \\
+Tuning overruns & medium & Measured in the pilot; reduce trials to 15 for the slowest family before R2 (D12). \\
+Evaluation overruns & medium & Cohort shards first, seed check last; re-balance machines. \\
+Machine preemption & medium & Per-task checkpoints; idempotent tasks; continuous sync to the bucket. \\
+GPU non-determinism & high (small) & Fixed seeds, deterministic flags, forecast hashes; quantified by A15. \\
+Degenerate buckets beyond nonlinearity & low & G12 flags them; handled as in D7. \\
+Residual leakage & low & U1, U5, U12, G7. \\
+Statistical failures on short series & low & Eligibility should remove them; U17 records any that remain. \\
+Supervisor unavailable at a gate & low & R0--R1 may proceed; tuning and evaluation wait for sign-off. \\
+Results contradict earlier drafts & high & Expected; the analysis plan is frozen before the run, so the conclusions follow the data. \\
+\end{longtable}
+}
+
+%=====================================================================
+\section{Consequences for the paper}\label{sec:paper}
+%=====================================================================
+
+\begin{itemize}
+  \item \textbf{Methods to rewrite:} frozen data (D2), eligibility (D3), pre-window-0 features
+  (D4, D5), per-feature sampling with M3 close to a census (D6), buckets and the support guard (D7),
+  real tuning with its spaces and budget (D12--D14, D25), the two training scopes as a temporal
+  hold-out on the same series (D15), strict execution and failure accounting (D16).
+  \item \textbf{Sample sizes change:} 2,400 series per feature (1,200 per frequency, about 400 per
+  bucket), about 8,500 distinct series overall.
+  \item \textbf{All results sections are regenerated} from the frozen bundle. No number from any
+  earlier version is carried over.
+  \item \textbf{Language of effects:} ``gain'', ``loss'', ``negligible'' and ``no evidence'' are used
+  exactly as defined in Section~\ref{sec:practical}.
+  \item \textbf{New figures:} critical-difference diagrams for both scopes (H7).
+  \item \textbf{Cross-feature statements} (``feature A moderates more than feature B'') compare
+  different samples and are worded as such; each feature's gradient is reported on its own sample.
+  \item \textbf{Limitations:} one main seed (quantified by A15); STL only; four features computed
+  from STL components; M3 Quarterly close to a census; the lowered quarterly feature guards (D5,
+  with A7); no feature-based selector (D28).
+  \item \textbf{Reproducibility statement:} code, manifest and frozen results released (D29).
+  \item \textbf{Unchanged:} introduction, related work, references, problem formulation, and the
+  documented failure mode of tercile bucketing (now detected by G12).
+\end{itemize}
+
+\appendix
+
+%=====================================================================
+\section{Defects found in the review}\label{app:defects}
+%=====================================================================
+
+{\small
+\begin{longtable}{@{}p{0.8cm} p{8.8cm} p{5.6cm}@{}}
+\toprule
+ID & Defect & Evidence \\
+\midrule
+\endfirsthead
+\toprule
+ID & Defect & Evidence \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+C1 & Global baselines and statistical STL results are stub forecasts from a non-strict run; forecasts jittered per task. & \code{baselines.py:30-38}; \code{train_family.py:53-70}; run summary ``NOT BENCHMARK-VALID''. \\
+C2 & No tuning; fixed configurations; placeholder Optuna files. & \code{mlforecast_auto.py:28-43}; \code{neural_auto.py:34}; \code{tune.py}; empty \code{optuna/}. \\
+C3 & Features computed on $y_{1:n-h}$, seeing test windows 0--1. & \code{compute_all.py:66}. \\
+C4 & Seasonal lag and input size set by the shortest series in the pool. & \code{mlforecast_auto.py:45-50}; \code{neural_auto.py:27-29}; 33\% of quarterly cohort fits had the lag. \\
+M1 & Trained global and tercile results on different series; no global STL-AC. & 1,681 shared series; run configuration of 25 May. \\
+M2 & Candidate pool equal to the quota, so no stratification took place. & 23 May configuration: pool cap 750. \\
+M3 & ``Held-out series'' wording; evaluation is a temporal hold-out. & \code{train_family.py:192-206}. \\
+M4 & Training histories as short as 6 quarterly and 12 monthly points. & \code{validation.py:6-16}. \\
+M5 & Thin neural training (500 steps, no explicit scaling). & \code{neural_auto.py:32-48}. \\
+F1 & Feature fallback values (0.0 / 1.0) assigned to short series. & 1.7--2.9\% of the 23 May sample. \\
+F2 & STL silently replaced by a constant trend or a moving average. & \code{mstl_features.py:28-51}. \\
+F3 & Pipeline source not under version control. & 0 tracked files in \code{forecasting_pipeline/src}. \\
+m1 & STL-AC provenance taken from the trend model only. & \code{train_family.py:264-271}. \\
+m2 & Statistical known-limit fallback even in strict mode. & \code{statistical.py:64-83}. \\
+m3 & Rebuild merges runs without provenance checks. & \code{rebuild_paper_data.py:31}. \\
+m4 & Analysis scripts not versioned. & --- \\
+m5 & No logs kept for the 28--30 May runs. & --- \\
+\end{longtable}
+}
+
+%=====================================================================
+\section{Decision record: alternatives considered}\label{app:alternatives}
+%=====================================================================
+
+The questions put to D.\ Costa on 28 September 2026, the option chosen, and the alternatives
+rejected. A rejected alternative may only be adopted later through the change log.
+
+{\small
+\begin{longtable}{@{}p{0.8cm} p{3.2cm} p{4.0cm} p{7.0cm}@{}}
+\toprule
+Dec. & Question & Chosen & Rejected alternatives (and why they were on the table) \\
+\midrule
+\endfirsthead
+\toprule
+Dec. & Question & Chosen & Rejected alternatives (and why they were on the table) \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+D1 & Reuse old results? & Full rerun & Reuse the 25 May strict run and add missing arms (different samples, C3/C4 remain). \\
+D2 & Datasets & M3+M4 monthly and quarterly & Add M4 yearly as a negative control; add weekly/daily (needs MSTL). \\
+D2 & Data source & Frozen copy with checksums & Download at run time (a changed mirror would change the data). \\
+D5 & Short quarterly series & A: guards lowered to 20 & B: two quarterly windows; C: original guards (M3 Quarterly $\approx$116); D: 400 per source. \\
+D4 & When features are computed & Once, before window 0 & Recomputed every window (bucket membership would change). \\
+D6 & Sample pool & All eligible series & Random 5,000 per M4 source (faster). \\
+D6 & Sampling design & Per feature, 600 per source & One common 3,000-series sample (pairable across features). \\
+D7 & Nonlinearity feature & Keep definition, flag it & Make it continuous; break ties at random. \\
+D7 & Degeneracy threshold & Any bucket $< 20\%$ & $< 10\%$; only an empty bucket. \\
+D25 & ML inputs & Lags $1\dots m$ & Lags + calendar dummies; lags + rolling statistics. \\
+D10 & Model set & Keep the 12 & Add DLinear; add DLinear + a zero-shot foundation model. \\
+D11 & ARIMA search & Approximate & Exact search (slower; no regression reference). \\
+D12 & Tuning approach & Real light tuning (Auto classes) & Fixed configurations; tune once per family on Direct only. \\
+D12 & Tuning objective & MASE & RelNaive on validation (custom loss); MAE (not scale-free). \\
+D12 & Trials & 20; 15 if pilot overruns & 20 fixed; 30 fixed. \\
+D13 & Where to tune & Once, on pre-test data & Separately per feature sample. \\
+D13 & Validation data & One block of $h$ & Two blocks monthly, one quarterly. \\
+D13 & STL-AC tuning & Separate study per component & One shared configuration; reuse the Direct configuration. \\
+D15 & Bucket-model tuning & Reuse the global configuration & Re-tune per bucket (confounds pool size with tuning). \\
+D15 & Experiment 2 scope & Fully paired & Reduced scope; move to the follow-up paper. \\
+D15 & Training pool & M3 + M4 pooled & Separate models per source. \\
+D17 & Seeds & One seed + seed check & One seed only; three seeds for neural and transformer. \\
+D8 & Refitting & Every window & Fit once, roll forward. \\
+D16 & Persistent failures & Fix and rerun the task & Exclude the configuration and report it. \\
+D20 & Machines & Four & Two; six or more. \\
+D20 & Sync target & Cloud bucket & University server; Google Drive. \\
+D22 & Library versions & Pin the May versions & Upgrade to the latest. \\
+D22 & Repository & New dedicated repository & Inside the existing Trabalho repository. \\
+D29 & Release & Code, manifest and results & Code only; nothing until the follow-up. \\
+D21 & Primary metric & $\RN$ & MASE; both co-primary. \\
+D26 & Practical threshold & 0.01 & 0.02; no threshold. \\
+D23 & Inference & Wilcoxon + Holm + MCM + Friedman/Nemenyi & Wilcoxon only; Bayesian signed-rank with ROPE. \\
+D23 & CD-diagram scope & Cohort and tercile separately & Cohort only; families instead of configurations. \\
+D27 & Family pooling & Equal weights & Weight by model count; never pool. \\
+D27 & Descriptive level & Instances; tests per series & Series level everywhere. \\
+D28 & Selector & None in this paper & A simple exploratory rule. \\
+D24 & Freeze & Tagged commit & Public pre-registration on OSF. \\
+D30 & Sign-off & Supervisor & Supervisor + partner; D.\ Costa alone. \\
+\end{longtable}
+}
+
+%=====================================================================
+\section{Change log}\label{app:changelog}
+%=====================================================================
+
+\begin{tabularx}{\linewidth}{@{}l l X@{}}
+\toprule
+Version & Date & Change \\
+\midrule
+1.0 & 28 Sep 2026 & First draft for approval. \\
+1.1 & 28 Sep 2026 & All open decisions taken in eight rounds of questions: D5 confirmed (option A); new decisions D25--D30 (ML inputs, practical threshold, aggregation, selector, release, sign-off); D2, D8, D11--D13, D15--D17, D20--D24 made explicit; Friedman + Nemenyi rankings (H7) and seed check (A15) added; gates G13 and tests U18--U19 added; timeline moved to start on the day of sign-off; Appendix~\ref{app:alternatives} added. \\
+ & & \\
+\bottomrule
+\end{tabularx}
+
+\end{document}
