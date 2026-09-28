@@ -28,7 +28,7 @@
 \pagestyle{fancy}
 \fancyhf{}
 \fancyhead[L]{\small\color{accent}Rerun protocol --- STL decomposition study}
-\fancyhead[R]{\small\color{accent}v1.1 --- for supervisor sign-off}
+\fancyhead[R]{\small\color{accent}v1.2 --- for supervisor sign-off}
 \fancyfoot[C]{\small\thepage}
 \renewcommand{\headrulewidth}{0.4pt}
 
@@ -51,7 +51,7 @@
 \large When Does Seasonal Decomposition Help?\\
 Pipeline decisions, measurement and analysis plan, implementation,\\ testing, pilot and full runs}
 \author{Prepared for D.\ Costa, the supervisor, and the partner university team}
-\date{Version 1.1 --- 28 September 2026 --- all decisions taken; awaiting supervisor sign-off}
+\date{Version 1.2 --- 28 September 2026 --- all decisions taken; awaiting supervisor sign-off}
 
 \begin{document}
 \maketitle
@@ -135,7 +135,7 @@ evolving-seasonality bucket. \\
   series (integration test I2).
   \item \textbf{Reused as code:} data loading, STL transform, rolling-origin split, RelNaive metric,
   the six feature definitions, checkpointing, scheduler and vast.ai scripts --- after the changes in
-  Section~\ref{sec:impl}, in a new dedicated repository.
+  Section~\ref{sec:impl}, in the new folder \code{pipeline/} of the project repository.
   \item \textbf{Reused as text:} introduction, related work, the 64 verified references, problem
   formulation and the structure of the methods and results sections.
 \end{itemize}
@@ -205,7 +205,7 @@ D17 & Seeds & One fixed seed per fit. Seed check: evolving seasonality, cohort s
 D18 & Statistical cache & Statistical forecasts computed once per series $\times$ window $\times$ strategy $\times$ model, reused across feature samples. & Pool-independent; saves compute; identical values. & Protocol \\
 D19 & Provenance & Every row stores code commit, environment-lock hash, data checksum, manifest hash, configuration hash, backend and version, and --- for STL-AC --- all three component provenances. & Fixes m1, F3. & Protocol \\
 D20 & Infrastructure & Four GPU machines, sharded by family $\times$ frequency; outputs and logs synced continuously to a cloud bucket via rclone, with checksums. & Survives instance loss; merge refuses mismatched hashes. & Team \\
-D22 & Code \& environment & A new dedicated git repository for the pipeline; the May library versions pinned in a committed lockfile (Section~\ref{sec:env}). & Clean history, shareable with the partner; regression test valid. & Team \\
+D22 & Code \& environment & The pipeline in a new top-level folder \code{pipeline/} of the project repository, developed on branch \code{rerun-v2} from an unmodified baseline commit (amended in v1.2); the May library versions pinned in a committed lockfile (Section~\ref{sec:env}). & One history for paper and code; every fix is a visible diff; regression test valid. & Team \\
 \multicolumn{5}{@{}l}{\emph{Analysis}}\\
 D21 & Metrics & Primary: $\RN$. Secondary: unclipped RelNaive, MASE, sMAPE, POCID. & Continuity with the paper. & Team \\
 D23 & Inference & Series-level Wilcoxon signed-rank with Holm correction per predefined table; multiple comparison matrices; Friedman + Nemenyi critical-difference rankings for cohort (36 configurations) and tercile (27) scopes, overall and per frequency; bootstrap CIs; ordered-trend tests. & Section~\ref{sec:analysis}. & Team \\
@@ -449,8 +449,10 @@ they are computed once per series, window, strategy and model and reused across 
 
 \subsection{Code, environment and data}\label{sec:env}
 
-The pipeline moves to a new dedicated git repository; the paper repository records the commit that
-produced the results (D22). The environment is pinned to the versions of the valid May runs:
+The pipeline lives in the new top-level folder \code{pipeline/} of the project repository
+(\code{github.com/DiogoCosta18/TimeSeriesForecasting}) and is developed on branch \code{rerun-v2},
+starting from an unmodified baseline commit; the paper and the code therefore share one history, and
+the results record the commit that produced them (D22). The environment is pinned to the versions of the valid May runs:
 Python 3.11.10, torch 2.5.1+cu121, mlforecast 1.0.31, neuralforecast 3.1.8, statsforecast 2.0.3,
 optuna 4.8.0, statsmodels 0.14.6, scikit-learn 1.8.0, numpy 2.4.6, pandas 2.3.3, scipy 1.15.3,
 ruptures 1.1.10 and datasetsforecast 1.0.1. A lockfile is committed and its hash is stored in every
@@ -609,7 +611,8 @@ Against & Four days is not enough to rebuild and re-test loading, features, chec
 \end{tabularx}
 \end{table}
 
-The current code is copied into the new dedicated repository, committed as a baseline, and
+The current code is copied unchanged into the folder \code{pipeline/} of the project repository,
+committed as a baseline, and
 refactored on a branch \code{rerun-v2}. Unsafe paths are deleted, not switched off; the non-strict
 mode ceases to exist.
 
@@ -913,7 +916,7 @@ Day 1 is the day of supervisor sign-off; the dates assume Tuesday 29 September 2
 \toprule
 Day & Date & Work \\
 \midrule
-1 & Tue 29 Sep & Supervisor sign-off. New repository; baseline commit; branch \code{rerun-v2}; environment lockfile; I5 API check; frozen data copy with checksums (U18). \\
+1 & Tue 29 Sep & Supervisor sign-off. Folder \code{pipeline/}; baseline commit; branch \code{rerun-v2}; environment lockfile; I5 API check; frozen data copy with checksums (U18). \\
 2 & Wed 30 Sep & Eligibility, pre-window-0 features, sampling, buckets, manifest (U1--U8). \\
 3 & Thu 1 Oct & Model wrappers split into tune / fit; stubs and jitter deleted; strict failures; provenance; seed keys (U9--U13, U16, U17). \\
 4 & Fri 2 Oct & Task graph with scopes and seed check; sharding; merge; gates; analysis package incl.\ Friedman / Nemenyi and D26 labels, tested on synthetic data (U14, U15, U19, I1, I4). \\
@@ -1072,7 +1075,7 @@ D16 & Persistent failures & Fix and rerun the task & Exclude the configuration a
 D20 & Machines & Four & Two; six or more. \\
 D20 & Sync target & Cloud bucket & University server; Google Drive. \\
 D22 & Library versions & Pin the May versions & Upgrade to the latest. \\
-D22 & Repository & New dedicated repository & Inside the existing Trabalho repository. \\
+D22 & Repository & New folder \code{pipeline/} in the existing project repository, branch \code{rerun-v2} (amended in v1.2) & A new dedicated repository (the v1.1 choice, replaced on instruction of D.\ Costa). \\
 D29 & Release & Code, manifest and results & Code only; nothing until the follow-up. \\
 D21 & Primary metric & $\RN$ & MASE; both co-primary. \\
 D26 & Practical threshold & 0.01 & 0.02; no threshold. \\
@@ -1096,6 +1099,7 @@ Version & Date & Change \\
 \midrule
 1.0 & 28 Sep 2026 & First draft for approval. \\
 1.1 & 28 Sep 2026 & All open decisions taken in eight rounds of questions: D5 confirmed (option A); new decisions D25--D30 (ML inputs, practical threshold, aggregation, selector, release, sign-off); D2, D8, D11--D13, D15--D17, D20--D24 made explicit; Friedman + Nemenyi rankings (H7) and seed check (A15) added; gates G13 and tests U18--U19 added; timeline moved to start on the day of sign-off; Appendix~\ref{app:alternatives} added. \\
+1.2 & 28 Sep 2026 & D22 amended on instruction of D.\ Costa: the pipeline lives in the new folder \code{pipeline/} of the existing project repository (\code{github.com/DiogoCosta18/TimeSeriesForecasting}), branch \code{rerun-v2}, instead of a new dedicated repository. Consequence: sharing the code with the partner university means sharing the repository, paper workspace included. Sections 1.2, 4.6, 6.1, the timeline and Appendix~\ref{app:alternatives} updated accordingly. \\
  & & \\
 \bottomrule
 \end{tabularx}
