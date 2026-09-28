@@ -1,0 +1,9 @@
+use_gpu: true
+neural_backend: optuna
+transformer_backend: optuna
+checkpoint_interval_seconds: 300
+status_interval_seconds: 60
+auto_destroy: controlled_by_env
+sync_outputs_before_destroy: true
+gpu_memory_log_interval_seconds: 60
+
