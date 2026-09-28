@@ -5,6 +5,10 @@
 !paper_workspace/
 !paper_workspace/**
 
+# Track the rerun pipeline (branch rerun-v2); its own .gitignore excludes caches and outputs.
+!pipeline/
+!pipeline/**
+
 # Exclude large parquets that exceed GitHub's 100MB limit.
 # Raw run results — big files
 paper_workspace/run_results/cv/fold_forecasts.parquet
