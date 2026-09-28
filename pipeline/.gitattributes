@@ -1,0 +1,19 @@
+# Line endings for the rerun pipeline.
+# Runs execute on Linux (vast.ai): scripts and code must keep LF on every
+# platform, whatever the local core.autocrlf setting.
+*.sh    text eol=lf
+*.py    text eol=lf
+*.yaml  text eol=lf
+*.yml   text eol=lf
+*.toml  text eol=lf
+*.txt   text eol=lf
+*.md    text eol=lf
+*.cfg   text eol=lf
+*.json  text eol=lf
+*.tex   text eol=lf
+
+# Binary artefacts must never be converted.
+*.parquet binary
+*.pdf     binary
+*.png     binary
+*.db      binary
