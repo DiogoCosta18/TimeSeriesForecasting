@@ -3,8 +3,8 @@
     python -m src.data.freeze_data freeze --out DIR --code-commit SHA
     python -m src.data.freeze_data verify --data-dir DIR [--manifest PATH]
 
-``freeze`` downloads the four sources through datasetsforecast 1.0.1 (the loader the
-earlier runs used), converts them to the canonical layout of ``src.data.frozen``,
+``freeze`` downloads the four sources through datasetsforecast 1.0.1 (the same files
+the earlier runs used), converts them to the canonical layout of ``src.data.frozen``,
 validates them, writes one parquet file per source plus ``MANIFEST.json`` (checksums
 of every raw download and every frozen file), and finally re-reads everything
 through the verified loader. It refuses to write into a non-empty directory, so a
@@ -15,8 +15,9 @@ What the sources are (verified in datasetsforecast 1.0.1, not assumed):
   2021), complete series including the competition's test period; series ids are
   positional ("M1", "M2", ... in file order).
 - M4: the official competition files (Mcompetitions/M4-methods, ``Dataset/Train``
-  and ``Dataset/Test``); the loader appends each test row to its training row, so
-  series are complete, including the competition's test period.
+  and ``Dataset/Test``), fetched by ``M4.download``; ``read_m4_official`` appends each
+  test row to its training row exactly as ``M4.load`` does, so series are complete,
+  including the competition's test period.
 Both sources are therefore complete series, treated identically.
 
 Validation that stops the freeze on any failure:
@@ -26,8 +27,8 @@ Validation that stops the freeze on any failure:
   horizon (M3: 48+18 monthly, 16+8 quarterly, Makridakis & Hibon 2000; M4: 42+18
   monthly, 16+8 quarterly, M4 Competitor's Guide), which confirms complete series;
 - M3: the Monash file declares no missing values and the expected horizon;
-- M4: every training row is a gap-free prefix, every test row has exactly h values,
-  and every frozen series equals its training row followed by its test row, exactly.
+- M4: every training row is a gap-free prefix, every test row has exactly h finite
+  values, and training and test ids match one-to-one without duplicates.
 """
 from __future__ import annotations
 
@@ -74,17 +75,21 @@ SOURCES = sorted(EXPECTED_SERIES)
 PACKAGES = ["datasetsforecast", "pandas", "numpy", "pyarrow", "utilsforecast"]
 
 
+def _shared_text(values: pd.Series, render) -> pd.Series:
+    """``render`` applied once per distinct value; rows share the resulting str objects (memory)."""
+    return values.map({v: render(v) for v in values.unique()}).astype("object")
+
+
 def _canonicalize(y_df: pd.DataFrame, source: str, group: str) -> pd.DataFrame:
     df = y_df[["unique_id", "ds", "y"]].copy()
     if source == "M4":
         df["ds"] = pd.to_numeric(df["ds"], errors="raise").astype("int64")
-        ds_text = df["ds"].astype(str)
+        df["ds_source"] = _shared_text(df["ds"], str)
     else:
         if not pd.api.types.is_datetime64_any_dtype(df["ds"]):
             raise FrozenDataError(f"{source}_{group}: expected datetime ds, got {df['ds'].dtype}")
-        ds_text = df["ds"].dt.strftime("%Y-%m-%d")
-    df["ds_source"] = ds_text.astype("object")
-    df["unique_id"] = (f"{source}_{group}_" + df["unique_id"].astype(str)).astype("object")
+        df["ds_source"] = _shared_text(df["ds"], lambda d: d.strftime("%Y-%m-%d"))
+    df["unique_id"] = _shared_text(df["unique_id"].astype(str), lambda u: f"{source}_{group}_{u}")
     df = df.sort_values(["unique_id", "ds"], kind="mergesort").reset_index(drop=True)
     df["t"] = (df.groupby("unique_id", sort=False).cumcount() + 1).astype("int64")
     if source == "M4" and not df["t"].eq(df["ds"]).all():
@@ -116,43 +121,67 @@ def _load_m3(raw_dir: Path, group: str) -> tuple[pd.DataFrame, dict]:
     }
 
 
-def _load_m4(raw_dir: Path, group: str) -> tuple[pd.DataFrame, dict]:
-    from datasetsforecast.m4 import M4
+def read_m4_official(raw_dir: Path, group: str, horizon: int) -> pd.DataFrame:
+    """Read the official M4 ``{group}-train.csv`` and ``{group}-test.csv`` into long form.
 
-    y_df, *_ = M4.load(directory=str(raw_dir), group=group, cache=False)
-    return y_df, {"source_urls": M4._download_urls(group)}
+    Returns the frame datasetsforecast's ``M4.load`` returns (columns unique_id, ds, y;
+    ds = 1-based position, test values appended after the training values), built
+    row by row instead of melting the whole wide table: ``M4.load`` needs more than
+    8 GB for M4 Monthly. Both use pandas' default CSV parser, so values are
+    bit-identical (tests/test_frozen_data.py runs ``M4.load`` itself as the reference).
 
-
-def check_m4_against_raw(canonical: pd.DataFrame, raw_dir: Path, group: str, horizon: int) -> None:
-    """Every frozen M4 series must equal its official training row followed by its test row."""
-    base = raw_dir / "m4" / "datasets"
+    Raises on anything ``M4.load`` would pass over silently: a training row whose
+    values are not a gap-free prefix (its ``dropna`` would close the gap), a test row
+    without exactly ``horizon`` finite values, duplicated ids, or ids not matched
+    one-to-one between the training and test files.
+    """
+    base = Path(raw_dir) / "m4" / "datasets"
     test = pd.read_csv(base / f"{group}-test.csv")
+    test_ids = test.iloc[:, 0].astype(str).to_numpy()
     test_vals = test.iloc[:, 1:].to_numpy(dtype=float)
     if test_vals.shape[1] != horizon or not np.isfinite(test_vals).all():
         raise FrozenDataError(f"M4_{group}: test file does not hold exactly {horizon} finite values per series")
-    test_by_id = dict(zip(test.iloc[:, 0].astype(str), test_vals))
-    frozen = {
-        uid.split("_", 2)[2]: g.to_numpy()
-        for uid, g in canonical.groupby("unique_id", sort=False)["y"]
-    }
-    seen = 0
+    test_by_id = dict(zip(test_ids, test_vals))
+    if len(test_by_id) != len(test_ids):
+        raise FrozenDataError(f"M4_{group}: duplicated ids in the test file")
+
+    ids, lengths, values = [], [], []
+    seen: set[str] = set()
     for chunk in pd.read_csv(base / f"{group}-train.csv", chunksize=2000):
-        ids = chunk.iloc[:, 0].astype(str).to_numpy()
+        chunk_ids = chunk.iloc[:, 0].astype(str).to_numpy()
         vals = chunk.iloc[:, 1:].to_numpy(dtype=float)
         present = np.isfinite(vals)
-        lengths = present.sum(axis=1)
-        for i, sid in enumerate(ids):
-            k = int(lengths[i])
-            if not (present[i, :k].all() and not present[i, k:].any()):
-                raise FrozenDataError(f"M4_{group} {sid}: training row has a gap (values are not a prefix)")
-            if sid not in test_by_id or sid not in frozen:
-                raise FrozenDataError(f"M4_{group} {sid}: missing from the test file or from the frozen data")
-            expected = np.concatenate([vals[i, :k], test_by_id[sid]])
-            if not np.array_equal(expected, frozen[sid]):
-                raise FrozenDataError(f"M4_{group} {sid}: frozen series differs from training row + test row")
-        seen += len(ids)
-    if seen != len(frozen) or seen != len(test_by_id):
-        raise FrozenDataError(f"M4_{group}: {seen} training rows, {len(test_by_id)} test rows, {len(frozen)} frozen series")
+        for i, sid in enumerate(chunk_ids):
+            k = int(present[i].sum())
+            if k == 0 or not present[i, :k].all():
+                raise FrozenDataError(f"M4_{group} {sid}: training values are not a gap-free prefix")
+            if sid in seen:
+                raise FrozenDataError(f"M4_{group} {sid}: duplicated id in the training file")
+            if sid not in test_by_id:
+                raise FrozenDataError(f"M4_{group} {sid}: no row in the test file")
+            seen.add(sid)
+            ids.append(sid)
+            lengths.append(k + horizon)
+            values.append(np.concatenate([vals[i, :k], test_by_id[sid]]))
+    if seen != set(test_by_id):
+        raise FrozenDataError(f"M4_{group}: {len(set(test_by_id) - seen)} test rows without a training row")
+
+    lengths_arr = np.asarray(lengths, dtype="int64")
+    return pd.DataFrame({
+        "unique_id": np.repeat(np.asarray(ids, dtype=object), lengths_arr),
+        "ds": np.concatenate([np.arange(1, n + 1, dtype="int64") for n in lengths_arr]),
+        "y": np.concatenate(values),
+    })
+
+
+def _load_m4(raw_dir: Path, group: str) -> tuple[pd.DataFrame, dict]:
+    from datasetsforecast.m4 import M4
+
+    M4.download(str(raw_dir), group)
+    return read_m4_official(raw_dir, group, HORIZON[group]), {
+        "source_urls": M4._download_urls(group),
+        "parser": "src.data.freeze_data.read_m4_official",
+    }
 
 
 def _raw_file_records(raw_dir: Path) -> list[dict]:
@@ -188,8 +217,7 @@ def freeze(out_dir: Path, code_commit: str) -> dict:
             expected_series=EXPECTED_SERIES[(source, group)],
             expected_min_length=MIN_TRAIN_LENGTH[(source, group)] + HORIZON[group],
         )
-        if source == "M4":
-            check_m4_against_raw(canonical, raw_dir, group, HORIZON[group])
+        del y_df
         path = frozen_dir / f"{key}.parquet"
         canonical.to_parquet(path, engine="pyarrow", index=False, compression="zstd")
         frozen_files[key] = {

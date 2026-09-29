@@ -12,69 +12,18 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from src.data.freeze_data import check_m4_against_raw, freeze
+from helpers_frozen import make_canonical, spec, write_frozen
+from src.data.freeze_data import _canonicalize, freeze, read_m4_official
 from src.data.frozen import (
     COLUMNS,
-    MANIFEST_FORMAT,
     FrozenDataError,
     content_sha256,
     load_frequency,
     load_manifest,
     load_source,
-    sha256_file,
     validate_canonical,
     verify_all,
 )
-
-
-def make_canonical(source_dataset: str = "M3_Monthly", lengths=(5, 7, 6), seed: int = 0) -> pd.DataFrame:
-    rng = np.random.default_rng(seed)
-    frequency = source_dataset.split("_")[1].lower()
-    rows = []
-    for i, n in enumerate(lengths, start=1):
-        for t in range(1, n + 1):
-            rows.append({
-                "unique_id": f"{source_dataset}_S{i}",
-                "source_dataset": source_dataset,
-                "frequency": frequency,
-                "t": t,
-                "y": float(rng.uniform(10, 100)),
-                "ds_source": str(t),
-            })
-    df = pd.DataFrame(rows)[COLUMNS]
-    return df.astype({"t": "int64", "y": "float64"})
-
-
-def spec(df: pd.DataFrame) -> dict:
-    lengths = df.groupby("unique_id")["t"].count()
-    return {
-        "source_dataset": df["source_dataset"].iloc[0],
-        "frequency": df["frequency"].iloc[0],
-        "expected_series": int(lengths.size),
-        "expected_min_length": int(lengths.min()),
-    }
-
-
-def write_frozen(tmp_path: Path, frames: dict[str, pd.DataFrame]) -> tuple[Path, Path]:
-    frozen_dir = tmp_path / "frozen"
-    frozen_dir.mkdir()
-    entries = {}
-    for key, df in frames.items():
-        path = frozen_dir / f"{key}.parquet"
-        df.to_parquet(path, engine="pyarrow", index=False, compression="zstd")
-        stats = validate_canonical(df, **spec(df))
-        entries[key] = {
-            "file": path.name,
-            "frequency": df["frequency"].iloc[0],
-            "horizon": 2,
-            "sha256": sha256_file(path),
-            "bytes": path.stat().st_size,
-            "content_sha256": content_sha256(df),
-            **stats,
-        }
-    manifest_path = tmp_path / "MANIFEST.json"
-    manifest_path.write_text(json.dumps({"format": MANIFEST_FORMAT, "frozen_files": entries}), encoding="utf-8")
-    return frozen_dir, manifest_path
 
 
 # --- content hash ------------------------------------------------------------------
@@ -226,55 +175,82 @@ def test_manifest_with_unknown_format_is_refused(tmp_path):
         load_manifest(path)
 
 
-# --- M4 cross-check against the official files -----------------------------------------
+# --- M4 reader over the official wide files ------------------------------------------------
 
 def _m4_raw(tmp_path: Path, train_rows, test_rows) -> Path:
+    """Write wide M4-style files (id column, then values, NaN padding on the right)."""
     base = tmp_path / "raw" / "m4" / "datasets"
     base.mkdir(parents=True)
     width = max(len(r) for _, r in train_rows)
     train = pd.DataFrame([[sid] + list(r) + [np.nan] * (width - len(r)) for sid, r in train_rows],
                          columns=["V1"] + [f"V{i}" for i in range(2, width + 2)])
-    test = pd.DataFrame([[sid] + list(r) for sid, r in test_rows],
-                        columns=["V1"] + [f"V{i}" for i in range(2, len(test_rows[0][1]) + 2)])
+    test_width = max(len(r) for _, r in test_rows)
+    test = pd.DataFrame([[sid] + list(r) + [np.nan] * (test_width - len(r)) for sid, r in test_rows],
+                        columns=["V1"] + [f"V{i}" for i in range(2, test_width + 2)])
     train.to_csv(base / "Monthly-train.csv", index=False)
     test.to_csv(base / "Monthly-test.csv", index=False)
     return tmp_path / "raw"
 
 
-def _m4_frozen(series: dict[str, list[float]]) -> pd.DataFrame:
-    rows = [
-        {"unique_id": f"M4_Monthly_{sid}", "source_dataset": "M4_Monthly", "frequency": "monthly",
-         "t": t, "y": float(v), "ds_source": str(t)}
-        for sid, values in series.items() for t, v in enumerate(values, start=1)
-    ]
-    return pd.DataFrame(rows)[COLUMNS]
+def test_m4_reader_is_identical_to_datasetsforecast_m4_load(tmp_path):
+    from datasetsforecast.m4 import M4
+
+    rng = np.random.default_rng(3)
+    lengths = {"M1": 5, "M2": 9, "M3": 3, "M10": 7}
+    train_rows = [(sid, list(rng.uniform(100, 10000, size=n))) for sid, n in lengths.items()]
+    test_rows = [(sid, list(rng.uniform(100, 10000, size=2))) for sid in reversed(lengths)]
+    raw = _m4_raw(tmp_path, train_rows, test_rows)
+    base = raw / "m4" / "datasets"
+    pd.DataFrame({"M4id": list(lengths), "category": "Macro"}).to_csv(base / "M4-info.csv", index=False)
+    (base / "submission-Naive2.zip").write_bytes(b"")  # present, so M4.load downloads nothing
+
+    reference, *_ = M4.load(directory=str(raw), group="Monthly", cache=False)
+    reference = reference.assign(unique_id=reference["unique_id"].astype(str), ds=reference["ds"].astype("int64"))
+    ours = read_m4_official(raw, "Monthly", horizon=2)
+    key = ["unique_id", "ds"]
+    pd.testing.assert_frame_equal(
+        ours.sort_values(key).reset_index(drop=True)[["unique_id", "ds", "y"]],
+        reference.sort_values(key).reset_index(drop=True)[["unique_id", "ds", "y"]],
+        check_exact=True,
+    )
+
+    canonical = _canonicalize(ours, "M4", "Monthly")
+    validate_canonical(canonical, source_dataset="M4_Monthly", frequency="monthly", expected_series=4, expected_min_length=5)
+    m10 = canonical[canonical["unique_id"] == "M4_Monthly_M10"]
+    assert m10["y"].tolist() == train_rows[3][1] + test_rows[0][1]
+    assert m10["t"].tolist() == list(range(1, 10)) and m10["ds_source"].tolist() == [str(t) for t in range(1, 10)]
 
 
-def test_m4_check_accepts_exact_train_plus_test(tmp_path):
-    raw = _m4_raw(tmp_path, [("M1", [1.0, 2.0, 3.0]), ("M2", [4.0, 5.0])], [("M1", [9.0, 8.0]), ("M2", [7.0, 6.0])])
-    frozen = _m4_frozen({"M1": [1, 2, 3, 9, 8], "M2": [4, 5, 7, 6]})
-    check_m4_against_raw(frozen, raw, "Monthly", horizon=2)
+@pytest.mark.parametrize(
+    "train_rows, test_rows, message",
+    [
+        ([("M1", [1.0, np.nan, 3.0])], [("M1", [9.0, 8.0])], "gap-free prefix"),
+        ([("M1", [1.0, 2.0])], [("M1", [9.0, 8.0, 7.0])], "exactly 2"),
+        ([("M1", [1.0, 2.0]), ("M2", [3.0, 4.0])], [("M1", [9.0, 8.0]), ("M2", [7.0, np.nan])], "exactly 2"),
+        ([("M1", [1.0, 2.0]), ("M1", [3.0, 4.0])], [("M1", [9.0, 8.0])], "duplicated id in the training"),
+        ([("M1", [1.0, 2.0])], [("M1", [9.0, 8.0]), ("M1", [7.0, 6.0])], "duplicated ids in the test"),
+        ([("M1", [1.0, 2.0]), ("M2", [3.0, 4.0])], [("M1", [9.0, 8.0])], "no row in the test file"),
+        ([("M1", [1.0, 2.0])], [("M1", [9.0, 8.0]), ("M2", [7.0, 6.0])], "without a training row"),
+    ],
+)
+def test_m4_reader_refuses_what_m4_load_would_pass_over(tmp_path, train_rows, test_rows, message):
+    raw = _m4_raw(tmp_path, train_rows, test_rows)
+    with pytest.raises(FrozenDataError, match=message):
+        read_m4_official(raw, "Monthly", horizon=2)
 
 
-def test_m4_check_rejects_gap_in_training_row(tmp_path):
-    raw = _m4_raw(tmp_path, [("M1", [1.0, np.nan, 3.0])], [("M1", [9.0, 8.0])])
-    frozen = _m4_frozen({"M1": [1, 3, 9, 8]})
-    with pytest.raises(FrozenDataError, match="gap"):
-        check_m4_against_raw(frozen, raw, "Monthly", horizon=2)
-
-
-def test_m4_check_rejects_values_that_differ_from_the_official_files(tmp_path):
-    raw = _m4_raw(tmp_path, [("M1", [1.0, 2.0])], [("M1", [9.0, 8.0])])
-    frozen = _m4_frozen({"M1": [1, 2, 9, 8.0000001]})
-    with pytest.raises(FrozenDataError, match="differs"):
-        check_m4_against_raw(frozen, raw, "Monthly", horizon=2)
-
-
-def test_m4_check_rejects_wrong_test_length(tmp_path):
-    raw = _m4_raw(tmp_path, [("M1", [1.0, 2.0])], [("M1", [9.0, 8.0, 7.0])])
-    frozen = _m4_frozen({"M1": [1, 2, 9, 8, 7]})
-    with pytest.raises(FrozenDataError, match="exactly 2"):
-        check_m4_against_raw(frozen, raw, "Monthly", horizon=2)
+def test_canonicalize_m3_keeps_iso_dates_and_positions():
+    y_df = pd.DataFrame({
+        "unique_id": ["M2", "M2", "M1", "M1", "M1"],
+        "ds": pd.to_datetime(["1990-02-28", "1990-01-31", "1985-03-31", "1985-01-31", "1985-02-28"]),
+        "y": [5.0, 4.0, 3.0, 1.0, 2.0],
+    })
+    canonical = _canonicalize(y_df, "M3", "Monthly")
+    assert canonical["unique_id"].tolist() == ["M3_Monthly_M1"] * 3 + ["M3_Monthly_M2"] * 2
+    assert canonical["t"].tolist() == [1, 2, 3, 1, 2]
+    assert canonical["y"].tolist() == [1.0, 2.0, 3.0, 4.0, 5.0]
+    assert canonical["ds_source"].tolist() == ["1985-01-31", "1985-02-28", "1985-03-31", "1990-01-31", "1990-02-28"]
+    validate_canonical(canonical, source_dataset="M3_Monthly", frequency="monthly", expected_series=2, expected_min_length=2)
 
 
 # --- freeze refuses unsafe invocations before touching the network ------------------------
