@@ -1,24 +1,25 @@
 """Create the frozen M3/M4 copy once, and verify it (rerun protocol D2, U18, G13).
 
-    python -m src.data.freeze_data freeze --out DIR --code-commit SHA
+    python -m src.data.freeze_data freeze --out DIR --code-commit SHA --m3c PATH/M3C.xls
     python -m src.data.freeze_data verify --data-dir DIR [--manifest PATH]
 
-``freeze`` downloads the four sources, converts them to the canonical layout of
-``src.data.frozen``, validates them, writes one parquet file per source plus
-``MANIFEST.json`` (checksums of every raw download and every frozen file), and
-finally re-reads everything through the verified loader. It refuses to write into a
+``freeze`` reads or downloads the four sources, converts them to the canonical
+layout of ``src.data.frozen``, validates them, writes one parquet file per source plus
+``MANIFEST.json`` (checksums of every raw file and every frozen file), and finally
+re-reads everything through the verified loader. It refuses to write into a
 non-empty directory, so a frozen copy is never modified in place.
 
-Sources (protocol D2, amended in v1.3):
-- M3: Mcomp 2.7 (CRAN archive, R. J. Hyndman), ``data/M3.rda``: the M3 competition
-  data with training (x) and test (xx) values, official ids (N0646, ...) and start
-  periods. The archive is refused unless its SHA-256 equals the pinned value.
-  Independent cross-check: every series must equal, bit for bit, the Monash Time
-  Series Forecasting Archive copy on Zenodo (the file the earlier runs used, read here
-  at full precision), except for the documented differences in
-  ``MONASH_M3_KNOWN_DIFFERENCES``; any other difference, or a documented one that is
-  not found, stops the freeze. (datasetsforecast's own TSF reader stores values as
-  float32 and is not used.)
+Sources (protocol D2, amended in v1.4):
+- M3: the original competition file ``M3C.xls`` of the International Institute of
+  Forecasters (M3 competition page). The site refuses scripted downloads, so the file
+  is supplied with ``--m3c``; it is refused unless its SHA-256 equals the pinned value,
+  and it is copied into the frozen copy's raw folder. Two independent copies are
+  compared with it value by value, and any difference other than those documented
+  in ``KNOWN_DIFFERENCES`` (or a documented one that is absent) stops the freeze:
+  the Monash Time Series Forecasting Archive files on Zenodo (the files the earlier
+  runs used, read here at full precision; datasetsforecast's own reader stores values
+  as float32 and is not used), which must be identical bit for bit; and Mcomp 2.7
+  (CRAN archive, R. J. Hyndman), which differs in one documented value.
 - M4: the official competition files (Mcompetitions/M4-methods, ``Dataset/Train``
   and ``Dataset/Test``), fetched by datasetsforecast's ``M4.download``;
   ``read_m4_official`` appends each test row to its training row exactly as
@@ -32,8 +33,9 @@ Validation that stops the freeze on any failure:
 - the shortest series equals the published minimum training length plus the
   horizon (M3: 48+18 monthly, 16+8 quarterly, Makridakis & Hibon 2000; M4: 42+18
   monthly, 16+8 quarterly, M4 Competitor's Guide), which confirms complete series;
-- M3: n and h of every series match its x and xx; time labels are consecutive;
-  the legacy positional ids (Mcomp field ``st``) follow the official-id order;
+- M3: every row holds exactly N values followed by empty cells, NF = h, ids are
+  unique and in official-id order (so the positional ids M1.., Q1.. of the earlier
+  runs map one-to-one onto official ids, as Mcomp's field ``st`` confirms);
 - M4: every training row is a gap-free prefix, every test row has exactly h finite
   values, and training and test ids match one-to-one without duplicates.
 """
@@ -85,18 +87,23 @@ MIN_TRAIN_LENGTH = {
     ("M4", "Quarterly"): 16,
 }
 SOURCES = sorted(EXPECTED_SERIES)
-PACKAGES = ["datasetsforecast", "pandas", "numpy", "pyarrow", "rdata", "utilsforecast"]
+PACKAGES = ["datasetsforecast", "pandas", "numpy", "pyarrow", "rdata", "utilsforecast", "xlrd"]
 
+M3C_PAGE = "https://forecasters.org/resources/time-series-data/m3-competition/"
+M3C_SHA256 = "23bfbba215dad49eb9b0f315a3e38bcc541f78f4689b168616ef25a5e8f293a6"
+M3C_SHEET = {"Monthly": ("M3Month", "Starting Month", 12), "Quarterly": ("M3Quart", "Starting Quarter", 4)}
 MCOMP_URL = "https://cran.r-project.org/src/contrib/Archive/Mcomp/Mcomp_2.7.tar.gz"
 MCOMP_SHA256 = "2177b210a612a47a1e9885e2aea6d3f7f9154090fd3d8e629a5909cfc04768af"
 MCOMP_MEMBER = "Mcomp/data/M3.rda"
 M3_PERIOD = {"Monthly": ("MONTHLY", 12), "Quarterly": ("QUARTERLY", 4)}
-# The only values in which the Monash copy of M3 differs from Mcomp, keyed by
-# (group, M3 id, position t) -> (Mcomp value, Monash value). N2786 at t=84 (test
-# period) carries a minus sign in Monash only; M3 series are positive (the
-# competition was scored with sMAPE and MAPE) and +1200 continues the seasonal
-# trough 3360, 1200, 1520.
-MONASH_M3_KNOWN_DIFFERENCES = {("Monthly", "N2786", 84): (1200.0, -1200.0)}
+# The only values in which a copy of M3 may differ from the original M3C.xls, keyed by
+# (group, M3 id, position t) -> (M3C.xls value, copy's value). Monash reproduces the
+# original exactly. Mcomp has +1200 where the original has -1200 (N2786, t=84, a test
+# value); its change log does not mention it.
+KNOWN_DIFFERENCES = {
+    "monash": {},
+    "mcomp": {("Monthly", "N2786", 84): (-1200.0, 1200.0)},
+}
 
 
 def _shared_text(values: pd.Series, render) -> pd.Series:
@@ -134,6 +141,19 @@ def _fetch(url: str, dest: Path, expected_sha256: str | None = None) -> None:
         part.replace(dest)
     if expected_sha256 is not None and sha256_file(dest) != expected_sha256:
         raise FrozenDataError(f"{dest.name}: sha256 {sha256_file(dest)} != pinned {expected_sha256}")
+
+
+def _copy_pinned(src: Path, dest: Path, expected_sha256: str) -> None:
+    """Copy a supplied file into the raw folder; refuse it unless its SHA-256 is the pinned one."""
+    src = Path(src)
+    if not src.is_file():
+        raise FrozenDataError(f"{src} does not exist")
+    if sha256_file(src) != expected_sha256:
+        raise FrozenDataError(f"{src.name}: sha256 {sha256_file(src)} != pinned {expected_sha256}")
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(src, dest)
+    if sha256_file(dest) != expected_sha256:
+        raise FrozenDataError(f"{dest}: copy does not match the pinned checksum")
 
 
 def _extract_member(archive: Path, member: str, dest: Path) -> None:
@@ -240,62 +260,147 @@ def read_monash_tsf(path: Path) -> tuple[dict, list[str], list[np.ndarray]]:
     return header, names, series
 
 
-def cross_check_m3(frame: pd.DataFrame, names: list[str], monash: list[np.ndarray], group: str,
-                   known: dict = MONASH_M3_KNOWN_DIFFERENCES) -> dict:
-    """Compare every M3 series with the Monash copy (series k of Monash = legacy id k)."""
-    by_id = {uid: g["y"].to_numpy() for uid, g in frame.groupby("unique_id", sort=False)}
-    order = sorted(by_id, key=lambda u: int(u[1:]))
-    if names != [f"T{k}" for k in range(1, len(names) + 1)] or len(names) != len(order):
-        raise FrozenDataError(f"M3_{group}: Monash has {len(names)} series named {names[:2]}..., Mcomp {len(order)}")
+def _m3_id(raw) -> str:
+    """'N 646' / 'N1402' (M3C.xls) -> 'N0646' / 'N1402'."""
+    match = re.fullmatch(r"N\s*(\d{1,4})", str(raw).strip())
+    if match is None:
+        raise FrozenDataError(f"unexpected M3 series name {raw!r}")
+    return f"N{int(match.group(1)):04d}"
+
+
+def read_m3c_sheet(path: Path, group: str) -> pd.DataFrame:
+    """The sheet of one group in M3C.xls, as read by pandas (xlrd), header row included."""
+    return pd.read_excel(Path(path), sheet_name=M3C_SHEET[group][0], engine="xlrd")
+
+
+def m3_frame_from_m3c(sheet: pd.DataFrame, group: str, horizon: int) -> tuple[pd.DataFrame, dict]:
+    """Long frame (unique_id = official id, ds = 1..N, y, ds_source) of one M3C.xls sheet, plus notes.
+
+    Each row is: Series, N (values including the test period), NF (horizon),
+    Category, Starting Year, Starting Month/Quarter, then the N values and empty cells.
+    Rows must be in official-id order, so the k-th row is the series the earlier
+    runs called M{k} / Q{k}. Start labels are recorded as given; a start period
+    beyond the year (N1071: quarter 9) is carried into the following years, and
+    series without a start date (year and period 0) keep their positions as labels.
+    """
+    _, period_col, freq = M3C_SHEET[group]
+    head = ["Series", "N", "NF", "Category", "Starting Year", period_col]
+    if list(sheet.columns[:6]) != head or list(sheet.columns[6:]) != list(range(1, sheet.shape[1] - 5)):
+        raise FrozenDataError(f"M3C.xls {group}: unexpected columns {list(sheet.columns[:8])}...")
+    values_all = sheet.iloc[:, 6:].to_numpy(dtype=float)
+    parts, ids = [], []
+    rolled_over, no_start = [], []
+    for row, values_row in zip(sheet.itertuples(index=False), values_all):
+        sid = _m3_id(row[0])
+        n, nf, year, start = int(row[1]), int(row[2]), int(row[4]), int(row[5])
+        if nf != horizon:
+            raise FrozenDataError(f"M3C.xls {group} {sid}: NF={nf}, expected {horizon}")
+        present = np.isfinite(values_row)
+        if n < 1 or not present[:n].all() or present[n:].any():
+            raise FrozenDataError(f"M3C.xls {group} {sid}: N={n} but {int(present.sum())} values, or not a gap-free prefix")
+        if year == 0 and start == 0:
+            labels = [str(t) for t in range(1, n + 1)]
+            no_start.append(sid)
+        else:
+            if not 1 <= start <= freq:
+                rolled_over.append(sid)
+            base = year * freq + start - 1
+            labels = [
+                f"{(base + k) // freq}-{(base + k) % freq + 1:02d}" if freq == 12 else f"{(base + k) // freq}-Q{(base + k) % freq + 1}"
+                for k in range(n)
+            ]
+        ids.append(sid)
+        parts.append(pd.DataFrame({
+            "unique_id": sid,
+            "ds": np.arange(1, n + 1, dtype="int64"),
+            "y": values_row[:n],
+            "ds_source": labels,
+        }))
+    if len(set(ids)) != len(ids):
+        raise FrozenDataError(f"M3C.xls {group}: duplicated series names")
+    if ids != sorted(ids, key=lambda s: int(s[1:])):
+        raise FrozenDataError(f"M3C.xls {group}: rows are not in official-id order")
+    if not parts:
+        raise FrozenDataError(f"M3C.xls {group}: no series")
+    notes = {"start_period_carried_over": rolled_over, "no_start_date_labels_are_positions": no_start}
+    return pd.concat(parts, ignore_index=True), notes
+
+
+def compare_with_copy(frame: pd.DataFrame, copy: dict[str, np.ndarray], group: str, known: dict) -> dict:
+    """Compare every M3 series with another copy, value by value (exact equality).
+
+    ``known`` maps (group, id, t) -> (our value, the copy's value). An undocumented
+    difference, a documented one that is absent, or any mismatch in ids or lengths
+    raises FrozenDataError.
+    """
+    ours = {uid: g["y"].to_numpy() for uid, g in frame.groupby("unique_id", sort=False)}
+    if set(ours) != set(copy):
+        raise FrozenDataError(f"M3_{group}: ids differ from the copy ({len(set(ours) ^ set(copy))} not shared)")
     found, n_values = {}, 0
-    for sn, other in zip(order, monash):
-        ours = by_id[sn]
-        if len(ours) != len(other):
-            raise FrozenDataError(f"M3_{group} {sn}: {len(ours)} values, Monash {len(other)}")
-        n_values += len(ours)
-        for i in np.flatnonzero(ours != other):
-            key = (group, sn, int(i) + 1)
-            if known.get(key) != (float(ours[i]), float(other[i])):
-                raise FrozenDataError(f"M3_{group} {sn} t={i + 1}: Mcomp {ours[i]!r}, Monash {other[i]!r} (undocumented)")
+    for sid in sorted(ours, key=lambda s: int(s[1:])):
+        a, b = ours[sid], np.asarray(copy[sid], dtype=float)
+        if len(a) != len(b):
+            raise FrozenDataError(f"M3_{group} {sid}: {len(a)} values, copy {len(b)}")
+        n_values += len(a)
+        for i in np.flatnonzero(a != b):
+            key = (group, sid, int(i) + 1)
+            if known.get(key) != (float(a[i]), float(b[i])):
+                raise FrozenDataError(f"M3_{group} {sid} t={i + 1}: M3C.xls {a[i]!r}, copy {b[i]!r} (undocumented)")
             found[key] = known[key]
     expected = {k for k in known if k[0] == group}
     if set(found) != expected:
         raise FrozenDataError(f"M3_{group}: documented differences not found: {sorted(expected - set(found))}")
     return {
-        "series_compared": len(order),
+        "series_compared": len(ours),
         "values_compared": n_values,
         "values_identical": n_values - len(found),
-        "differences": [
-            {"series": sn, "t": t, "mcomp": v[0], "monash": v[1]} for (_, sn, t), v in sorted(found.items())
-        ],
+        "differences": [{"series": sid, "t": t, "m3c": v[0], "copy": v[1]} for (_, sid, t), v in sorted(found.items())],
     }
 
 
-def _load_m3(raw_dir: Path, group: str) -> tuple[pd.DataFrame, dict]:
+def monash_by_id(names: list[str], series: list[np.ndarray], ids_in_order: list[str]) -> dict[str, np.ndarray]:
+    """Monash names series T1..Tn in file order, which is the official-id order."""
+    if names != [f"T{k}" for k in range(1, len(names) + 1)] or len(names) != len(ids_in_order):
+        raise FrozenDataError(f"Monash file has {len(names)} series named {names[:2]}..., expected {len(ids_in_order)}")
+    return dict(zip(ids_in_order, series))
+
+
+def _load_m3(raw_dir: Path, group: str, m3c_path: Path) -> tuple[pd.DataFrame, dict]:
     from datasetsforecast.m3 import M3, M3Info
 
     m3_dir = Path(raw_dir) / "m3"
-    archive, rda = m3_dir / "Mcomp_2.7.tar.gz", m3_dir / "Mcomp_2.7_M3.rda"
-    _fetch(MCOMP_URL, archive, MCOMP_SHA256)
-    if not rda.exists():
-        _extract_member(archive, MCOMP_MEMBER, rda)
-    frame = m3_frame_from_mcomp(read_mcomp_m3(rda), group, HORIZON[group])
+    m3c = m3_dir / "M3C.xls"
+    if not m3c.exists():
+        _copy_pinned(m3c_path, m3c, M3C_SHA256)
+    frame, notes = m3_frame_from_m3c(read_m3c_sheet(m3c, group), group, HORIZON[group])
+    ids = sorted(frame["unique_id"].unique(), key=lambda s: int(s[1:]))
 
     info = M3Info.get_group(group)
     M3.download(str(raw_dir), info)
     header, names, monash = read_monash_tsf(m3_dir / "datasets" / f"{info.file_name}.tsf")
     if header.get("missing") != "false" or header.get("horizon") != str(HORIZON[group]):
         raise FrozenDataError(f"M3_{group}: Monash header {header}")
-    check = cross_check_m3(frame, names, monash, group)
+    monash_check = compare_with_copy(frame, monash_by_id(names, monash, ids), group, KNOWN_DIFFERENCES["monash"])
+
+    archive, rda = m3_dir / "Mcomp_2.7.tar.gz", m3_dir / "Mcomp_2.7_M3.rda"
+    _fetch(MCOMP_URL, archive, MCOMP_SHA256)
+    if not rda.exists():
+        _extract_member(archive, MCOMP_MEMBER, rda)
+    mcomp = m3_frame_from_mcomp(read_mcomp_m3(rda), group, HORIZON[group])
+    mcomp_values = {uid: g["y"].to_numpy() for uid, g in mcomp.groupby("unique_id", sort=False)}
+    mcomp_check = compare_with_copy(frame, mcomp_values, group, KNOWN_DIFFERENCES["mcomp"])
     return frame, {
-        "source": "Mcomp 2.7 (CRAN), data/M3.rda",
-        "source_url": MCOMP_URL,
-        "archive_sha256": MCOMP_SHA256,
-        "member": MCOMP_MEMBER,
-        "member_sha256": sha256_file(rda),
-        "series_ids": "official M3 ids (field sn); field st = legacy positional id (M1.. / Q1..) "
-                      "of datasetsforecast and the earlier runs, checked to follow official-id order",
-        "cross_check": {"reference": "Monash TSF archive (read at full precision)", "reference_url": info.source_url, **check},
+        "source": "M3C.xls, International Institute of Forecasters (supplied file; the site refuses scripted downloads)",
+        "source_page": M3C_PAGE,
+        "sheet": M3C_SHEET[group][0],
+        "sha256": M3C_SHA256,
+        "series_ids": "official M3 ids, zero-padded (N 646 -> N0646); row k is the positional id "
+                      f"{group[0]}k of datasetsforecast and the earlier runs (rows checked to be in id order)",
+        "start_labels": notes,
+        "cross_checks": {
+            "monash": {"reference_url": info.source_url, "read_at": "full precision", **monash_check},
+            "mcomp": {"reference_url": MCOMP_URL, "archive_sha256": MCOMP_SHA256, **mcomp_check},
+        },
     }
 
 
@@ -373,12 +478,14 @@ def _raw_file_records(raw_dir: Path) -> list[dict]:
     return records
 
 
-def freeze(out_dir: Path, code_commit: str) -> dict:
+def freeze(out_dir: Path, code_commit: str, m3c_path: Path) -> dict:
     out_dir = Path(out_dir)
     if not re.fullmatch(r"[0-9a-f]{40}", code_commit):
         raise FrozenDataError("--code-commit must be a full 40-character git commit hash")
     if out_dir.exists() and any(out_dir.iterdir()):
         raise FrozenDataError(f"{out_dir} is not empty; a frozen copy is never overwritten")
+    if not Path(m3c_path).is_file() or sha256_file(m3c_path) != M3C_SHA256:
+        raise FrozenDataError(f"{m3c_path}: not the pinned M3C.xls (sha256 must be {M3C_SHA256})")
     raw_dir, frozen_dir = out_dir / "raw", out_dir / "frozen"
     raw_dir.mkdir(parents=True, exist_ok=True)
     frozen_dir.mkdir(parents=True, exist_ok=True)
@@ -386,7 +493,10 @@ def freeze(out_dir: Path, code_commit: str) -> dict:
     frozen_files: dict[str, dict] = {}
     for source, group in SOURCES:
         key = f"{source}_{group}"
-        y_df, provenance = (_load_m3 if source == "M3" else _load_m4)(raw_dir, group)
+        if source == "M3":
+            y_df, provenance = _load_m3(raw_dir, group, m3c_path)
+        else:
+            y_df, provenance = _load_m4(raw_dir, group)
         canonical = _canonicalize(y_df, source, group)
         stats = validate_canonical(
             canonical,
@@ -439,6 +549,7 @@ def main(argv: list[str] | None = None) -> int:
     p_freeze = sub.add_parser("freeze", help="download, validate and freeze M3/M4 once")
     p_freeze.add_argument("--out", required=True, type=Path)
     p_freeze.add_argument("--code-commit", required=True)
+    p_freeze.add_argument("--m3c", required=True, type=Path, help="the original M3C.xls (pinned SHA-256)")
     p_verify = sub.add_parser("verify", help="verify a frozen copy against a manifest")
     p_verify.add_argument("--data-dir", required=True, type=Path, help="directory holding the frozen/ folder")
     p_verify.add_argument("--manifest", type=Path, default=None)
@@ -446,7 +557,7 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         if args.command == "freeze":
-            freeze(args.out, args.code_commit)
+            freeze(args.out, args.code_commit, args.m3c)
             print(f"Frozen copy written to {args.out}; verified.")
         else:
             manifest = load_manifest(args.manifest) if args.manifest else load_manifest()

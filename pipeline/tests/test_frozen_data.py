@@ -17,10 +17,15 @@ from helpers_frozen import make_canonical, spec, write_frozen
 from src.data.freeze_data import (
     MCOMP_SHA256,
     _canonicalize,
+    M3C_SHA256,
+    _copy_pinned,
     _fetch,
-    cross_check_m3,
+    _m3_id,
+    compare_with_copy,
     freeze,
+    m3_frame_from_m3c,
     m3_frame_from_mcomp,
+    monash_by_id,
     read_m4_official,
     read_monash_tsf,
 )
@@ -250,7 +255,7 @@ def test_m4_reader_refuses_what_m4_load_would_pass_over(tmp_path, train_rows, te
         read_m4_official(raw, "Monthly", horizon=2)
 
 
-# --- M3 from Mcomp, cross-checked against Monash --------------------------------------------
+# --- M3: the original M3C.xls; Monash and Mcomp as cross-checks ----------------------------
 
 def _mcomp(sn, st, x, xx, period="MONTHLY", freq=12, start=Fraction(1990), n=None, h=None):
     """One series shaped like rdata's conversion of an Mcomp ``Mdata`` object."""
@@ -272,7 +277,7 @@ def _mcomp_set(**changes):
     return series
 
 
-def test_m3_from_mcomp_official_ids_positions_and_period_labels():
+def test_mcomp_copy_official_ids_positions_and_period_labels():
     frame = m3_frame_from_mcomp(_mcomp_set(), "Monthly", horizon=2)
     assert frame["unique_id"].tolist() == ["N0002"] * 4 + ["N0010"] * 5
     assert frame["ds"].tolist() == [1, 2, 3, 4, 1, 2, 3, 4, 5]
@@ -300,7 +305,7 @@ def test_m3_from_mcomp_official_ids_positions_and_period_labels():
          "not consecutive"),
     ],
 )
-def test_m3_from_mcomp_refuses_inconsistent_series(changes, message):
+def test_mcomp_copy_refuses_inconsistent_series(changes, message):
     with pytest.raises(FrozenDataError, match=message):
         m3_frame_from_mcomp(_mcomp_set(**changes), "Monthly", horizon=2)
 
@@ -325,56 +330,177 @@ def test_monash_tsf_is_read_at_full_precision(tmp_path):
         read_monash_tsf(_tsf(tmp_path, [("T1", "1,?,3")]))
 
 
-def test_cross_check_accepts_identical_series_and_reports_counts():
-    frame = m3_frame_from_mcomp(_mcomp_set(), "Monthly", horizon=2)
-    monash = [np.array([1.5, 2.5, 3.5, 4.5]), np.array([5.0, 6.0, 7.0, 8.0, 9.0])]
-    report = cross_check_m3(frame, ["T1", "T2"], monash, "Monthly", known={})
+def _m3c_sheet(rows, period_col="Starting Month"):
+    """A sheet shaped like M3C.xls: Series, N, NF, Category, start, then values and empty cells."""
+    width = max(len(values) for *_, values in rows) + 1
+    records = [
+        [name, len(values), nf, category, year, start] + list(values) + [np.nan] * (width - len(values))
+        for name, nf, category, year, start, values in rows
+    ]
+    columns = ["Series", "N", "NF", "Category", "Starting Year", period_col] + list(range(1, width + 1))
+    return pd.DataFrame(records, columns=columns)
+
+
+MONTHLY_SHEET_ROWS = [
+    ("N  12", 2, "MICRO", 1985, 11, [1.5, 2.5, 3.5, 4.5]),
+    ("N1402", 2, "OTHER", 0, 0, [5.0, 6.0, 7.0, 8.0, 9.0]),
+]
+
+
+def test_m3c_reader_official_ids_values_and_start_labels():
+    frame, notes = m3_frame_from_m3c(_m3c_sheet(MONTHLY_SHEET_ROWS), "Monthly", horizon=2)
+    assert frame["unique_id"].tolist() == ["N0012"] * 4 + ["N1402"] * 5
+    assert frame["ds"].tolist() == [1, 2, 3, 4, 1, 2, 3, 4, 5]
+    assert frame["y"].tolist() == [1.5, 2.5, 3.5, 4.5, 5.0, 6.0, 7.0, 8.0, 9.0]
+    assert frame["ds_source"].tolist() == ["1985-11", "1985-12", "1986-01", "1986-02", "1", "2", "3", "4", "5"]
+    assert notes == {"start_period_carried_over": [], "no_start_date_labels_are_positions": ["N1402"]}
+
+    quarterly = _m3c_sheet([("N 646", 2, "MACRO", 1984, 9, [1.0, 2.0, 3.0])], period_col="Starting Quarter")
+    frame_q, notes_q = m3_frame_from_m3c(quarterly, "Quarterly", horizon=2)
+    assert frame_q["ds_source"].tolist() == ["1986-Q1", "1986-Q2", "1986-Q3"]
+    assert notes_q["start_period_carried_over"] == ["N0646"]
+
+    canonical = _canonicalize(frame, "M3", "Monthly")
+    assert canonical["unique_id"].tolist() == ["M3_Monthly_N0012"] * 4 + ["M3_Monthly_N1402"] * 5
+    validate_canonical(canonical, source_dataset="M3_Monthly", frequency="monthly", expected_series=2, expected_min_length=4)
+
+
+def _nf_wrong(df):
+    df.loc[0, "NF"] = 3
+    return df
+
+
+def _n_too_large(df):
+    df.loc[0, "N"] = 5
+    return df
+
+
+def _n_too_small(df):
+    df.loc[0, "N"] = 3
+    return df
+
+
+def _gap(df):
+    df.loc[0, 2] = np.nan
+    return df
+
+
+def _out_of_order(df):
+    return df.iloc[::-1].reset_index(drop=True)
+
+
+def _duplicated(df):
+    df.loc[1, "Series"] = "N0012"
+    return df
+
+
+def _bad_name(df):
+    df.loc[0, "Series"] = "X12"
+    return df
+
+
+def _wrong_columns(df):
+    return df.rename(columns={"Starting Month": "Starting Quarter"})
+
+
+@pytest.mark.parametrize(
+    "mutate, message",
+    [
+        (_nf_wrong, "NF=3"),
+        (_n_too_large, "N=5"),
+        (_n_too_small, "N=3"),
+        (_gap, "not a gap-free prefix"),
+        (_out_of_order, "official-id order"),
+        (_duplicated, "duplicated"),
+        (_bad_name, "unexpected M3 series name"),
+        (_wrong_columns, "unexpected columns"),
+    ],
+)
+def test_m3c_reader_refuses_inconsistent_rows(mutate, message):
+    with pytest.raises(FrozenDataError, match=message):
+        m3_frame_from_m3c(mutate(_m3c_sheet(MONTHLY_SHEET_ROWS)), "Monthly", horizon=2)
+
+
+def test_m3_ids_are_zero_padded_official_ids():
+    assert [_m3_id(x) for x in ["N 646", "N1402", "N   1", " N2829 "]] == ["N0646", "N1402", "N0001", "N2829"]
+    with pytest.raises(FrozenDataError):
+        _m3_id("M1")
+
+
+def _frame_and_copy():
+    frame, _ = m3_frame_from_m3c(_m3c_sheet(MONTHLY_SHEET_ROWS), "Monthly", horizon=2)
+    copy = {"N0012": np.array([1.5, 2.5, 3.5, 4.5]), "N1402": np.array([5.0, 6.0, 7.0, 8.0, 9.0])}
+    return frame, copy
+
+
+def test_compare_with_copy_accepts_identical_series_and_reports_counts():
+    frame, copy = _frame_and_copy()
+    report = compare_with_copy(frame, copy, "Monthly", known={})
     assert report == {"series_compared": 2, "values_compared": 9, "values_identical": 9, "differences": []}
 
 
-def test_cross_check_requires_documented_differences_exactly():
-    frame = m3_frame_from_mcomp(_mcomp_set(), "Monthly", horizon=2)
-    monash = [np.array([1.5, 2.5, 3.5, 4.5]), np.array([5.0, 6.0, -7.0, 8.0, 9.0])]
-    known = {("Monthly", "N0010", 3): (7.0, -7.0)}
-    report = cross_check_m3(frame, ["T1", "T2"], monash, "Monthly", known=known)
-    assert report["differences"] == [{"series": "N0010", "t": 3, "mcomp": 7.0, "monash": -7.0}]
+def test_compare_with_copy_requires_documented_differences_exactly():
+    frame, copy = _frame_and_copy()
+    changed = {**copy, "N1402": np.array([5.0, 6.0, -7.0, 8.0, 9.0])}
+    known = {("Monthly", "N1402", 3): (7.0, -7.0)}
+    report = compare_with_copy(frame, changed, "Monthly", known=known)
+    assert report["differences"] == [{"series": "N1402", "t": 3, "m3c": 7.0, "copy": -7.0}]
     assert report["values_identical"] == 8
     with pytest.raises(FrozenDataError, match="undocumented"):
-        cross_check_m3(frame, ["T1", "T2"], monash, "Monthly", known={})
-    identical = [np.array([1.5, 2.5, 3.5, 4.5]), np.array([5.0, 6.0, 7.0, 8.0, 9.0])]
+        compare_with_copy(frame, changed, "Monthly", known={})
     with pytest.raises(FrozenDataError, match="documented differences not found"):
-        cross_check_m3(frame, ["T1", "T2"], identical, "Monthly", known=known)
-    one_ulp = [np.array([1.5, 2.5, 3.5, np.nextafter(4.5, 5)]), np.array([5.0, 6.0, 7.0, 8.0, 9.0])]
+        compare_with_copy(frame, copy, "Monthly", known=known)
+    one_ulp = {**copy, "N0012": np.array([1.5, 2.5, 3.5, np.nextafter(4.5, 5)])}
     with pytest.raises(FrozenDataError, match="undocumented"):
-        cross_check_m3(frame, ["T1", "T2"], one_ulp, "Monthly", known={})
+        compare_with_copy(frame, one_ulp, "Monthly", known={})
 
 
-def test_cross_check_refuses_misaligned_files():
-    frame = m3_frame_from_mcomp(_mcomp_set(), "Monthly", horizon=2)
-    monash = [np.array([1.5, 2.5, 3.5, 4.5]), np.array([5.0, 6.0, 7.0, 8.0, 9.0])]
-    with pytest.raises(FrozenDataError, match="Monash has 1 series"):
-        cross_check_m3(frame, ["T1"], monash[:1], "Monthly", known={})
-    with pytest.raises(FrozenDataError, match="Monash has 2 series"):
-        cross_check_m3(frame, ["T2", "T1"], monash, "Monthly", known={})
-    with pytest.raises(FrozenDataError, match="5 values, Monash 4"):
-        cross_check_m3(frame, ["T1", "T2"], [monash[0], monash[1][:4]], "Monthly", known={})
+def test_compare_with_copy_refuses_different_ids_or_lengths():
+    frame, copy = _frame_and_copy()
+    with pytest.raises(FrozenDataError, match="ids differ"):
+        compare_with_copy(frame, {"N0012": copy["N0012"]}, "Monthly", known={})
+    with pytest.raises(FrozenDataError, match="5 values, copy 4"):
+        compare_with_copy(frame, {**copy, "N1402": copy["N1402"][:4]}, "Monthly", known={})
 
 
-def test_fetch_refuses_a_file_whose_checksum_is_not_the_pinned_one(tmp_path):
-    source = tmp_path / "archive.tar.gz"
-    source.write_bytes(b"not the archive")
-    dest = tmp_path / "raw" / "archive.tar.gz"
-    _fetch(source.as_uri(), dest, sha256_file(source))
-    assert dest.read_bytes() == b"not the archive"
+def test_monash_series_are_matched_to_official_ids_by_file_order():
+    series = [np.array([1.0]), np.array([2.0])]
+    assert monash_by_id(["T1", "T2"], series, ["N0012", "N1402"])["N1402"].tolist() == [2.0]
+    with pytest.raises(FrozenDataError, match="2 series"):
+        monash_by_id(["T2", "T1"], series, ["N0012", "N1402"])
+    with pytest.raises(FrozenDataError, match="expected 3"):
+        monash_by_id(["T1", "T2"], series, ["N0012", "N1402", "N1403"])
+
+
+def test_supplied_and_downloaded_files_must_have_the_pinned_checksum(tmp_path):
+    source = tmp_path / "file.bin"
+    source.write_bytes(b"not the pinned file")
+    dest = tmp_path / "raw" / "file.bin"
+    _copy_pinned(source, dest, sha256_file(source))
+    assert dest.read_bytes() == b"not the pinned file"
     with pytest.raises(FrozenDataError, match="pinned"):
-        _fetch(source.as_uri(), dest, MCOMP_SHA256)
+        _copy_pinned(source, tmp_path / "raw" / "other.bin", M3C_SHA256)
+    with pytest.raises(FrozenDataError, match="does not exist"):
+        _copy_pinned(tmp_path / "missing.xls", tmp_path / "raw" / "x.xls", M3C_SHA256)
+
+    fetched = tmp_path / "raw" / "archive.tar.gz"
+    _fetch(source.as_uri(), fetched, sha256_file(source))
+    assert fetched.read_bytes() == b"not the pinned file"
+    with pytest.raises(FrozenDataError, match="pinned"):
+        _fetch(source.as_uri(), fetched, MCOMP_SHA256)
 
 
 # --- freeze refuses unsafe invocations before touching the network ------------------------
 
-def test_freeze_refuses_non_empty_directory_and_bad_commit(tmp_path):
-    (tmp_path / "existing.txt").write_text("x", encoding="utf-8")
+def test_freeze_refuses_non_empty_directory_bad_commit_and_wrong_m3c(tmp_path):
+    fake_m3c = tmp_path / "M3C.xls"
+    fake_m3c.write_bytes(b"not the competition file")
     with pytest.raises(FrozenDataError, match="not empty"):
-        freeze(tmp_path, "a" * 40)
+        freeze(tmp_path, "a" * 40, fake_m3c)
     with pytest.raises(FrozenDataError, match="commit"):
-        freeze(tmp_path / "new", "not-a-hash")
+        freeze(tmp_path / "new", "not-a-hash", fake_m3c)
+    with pytest.raises(FrozenDataError, match="not the pinned M3C.xls"):
+        freeze(tmp_path / "new", "a" * 40, fake_m3c)
+    with pytest.raises(FrozenDataError, match="not the pinned M3C.xls"):
+        freeze(tmp_path / "new", "a" * 40, tmp_path / "absent.xls")
+    assert not (tmp_path / "new").exists()
