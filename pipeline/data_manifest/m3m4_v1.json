@@ -1,0 +1,269 @@
+{
+  "content_hash_definition": "sha256 over: the tag 'rerun-m3m4-content-v1\\n'; then, with rows sorted by (unique_id, t), the 8-byte little-endian length of the UTF-8 encoding of all unique_id values joined by '\\n', followed by that encoding; then all t values as little-endian int64; then all y values as little-endian IEEE-754 float64.",
+  "created_at_utc": "2026-09-29T20:50:17Z",
+  "created_by": {
+    "code_commit": "98e83684c40dc9e86301b082eeb6c57c17a98081",
+    "packages": {
+      "datasetsforecast": "1.0.1",
+      "numpy": "2.4.6",
+      "pandas": "2.3.3",
+      "pyarrow": "24.0.0",
+      "rdata": "0.11.2",
+      "utilsforecast": "0.2.16",
+      "xlrd": "2.0.2"
+    },
+    "platform": "Linux-6.18.33.2-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+    "python": "3.11.10"
+  },
+  "dataset_version": "m3m4-v1",
+  "format": "rerun-frozen-data-manifest/1",
+  "frozen_files": {
+    "M3_Monthly": {
+      "bytes": 448292,
+      "content_sha256": "4ba362c788861f1dee2817d655e9a01a4716ffa6cc3aaa0766524adc538a74f9",
+      "file": "M3_Monthly.parquet",
+      "frequency": "monthly",
+      "horizon": 18,
+      "length_max": 144,
+      "length_median": 133.0,
+      "length_min": 66,
+      "n_series": 1428,
+      "provenance": {
+        "cross_checks": {
+          "mcomp": {
+            "archive_sha256": "2177b210a612a47a1e9885e2aea6d3f7f9154090fd3d8e629a5909cfc04768af",
+            "differences": [
+              {
+                "copy": 1200.0,
+                "m3c": -1200.0,
+                "series": "N2786",
+                "t": 84
+              }
+            ],
+            "reference_url": "https://cran.r-project.org/src/contrib/Archive/Mcomp/Mcomp_2.7.tar.gz",
+            "series_compared": 1428,
+            "values_compared": 167562,
+            "values_identical": 167561
+          },
+          "monash": {
+            "differences": [],
+            "read_at": "full precision",
+            "reference_url": "https://zenodo.org/api/records/4656298/files/m3_monthly_dataset.zip/content",
+            "series_compared": 1428,
+            "values_compared": 167562,
+            "values_identical": 167562
+          }
+        },
+        "series_ids": "official M3 ids, zero-padded (N 646 -> N0646); row k is the positional id Mk of datasetsforecast and the earlier runs (rows checked to be in id order)",
+        "sha256": "23bfbba215dad49eb9b0f315a3e38bcc541f78f4689b168616ef25a5e8f293a6",
+        "sheet": "M3Month",
+        "source": "M3C.xls, International Institute of Forecasters (supplied file; the site refuses scripted downloads)",
+        "source_page": "https://forecasters.org/resources/time-series-data/m3-competition/",
+        "start_labels": {
+          "no_start_date_labels_are_positions": [
+            "N2801",
+            "N2802",
+            "N2803",
+            "N2804",
+            "N2805",
+            "N2806",
+            "N2807",
+            "N2808",
+            "N2809",
+            "N2810",
+            "N2811",
+            "N2812",
+            "N2813",
+            "N2814",
+            "N2815",
+            "N2816",
+            "N2817",
+            "N2818",
+            "N2819",
+            "N2820",
+            "N2821",
+            "N2822",
+            "N2823",
+            "N2824",
+            "N2825",
+            "N2826",
+            "N2827",
+            "N2828",
+            "N2829"
+          ],
+          "start_period_carried_over": []
+        }
+      },
+      "rows": 167562,
+      "sha256": "b25a7678bd0563d12c685162b0143450c48fd9529788339d9bd44c9691984e6d",
+      "y_max": 86730.0,
+      "y_min": -1200.0
+    },
+    "M3_Quarterly": {
+      "bytes": 150114,
+      "content_sha256": "8e6314b9557b2a1f07cf24bcd7039e42bf6f0a7b9ad36cb99138e9d85f01e97d",
+      "file": "M3_Quarterly.parquet",
+      "frequency": "quarterly",
+      "horizon": 8,
+      "length_max": 72,
+      "length_median": 52.0,
+      "length_min": 24,
+      "n_series": 756,
+      "provenance": {
+        "cross_checks": {
+          "mcomp": {
+            "archive_sha256": "2177b210a612a47a1e9885e2aea6d3f7f9154090fd3d8e629a5909cfc04768af",
+            "differences": [],
+            "reference_url": "https://cran.r-project.org/src/contrib/Archive/Mcomp/Mcomp_2.7.tar.gz",
+            "series_compared": 756,
+            "values_compared": 37004,
+            "values_identical": 37004
+          },
+          "monash": {
+            "differences": [],
+            "read_at": "full precision",
+            "reference_url": "https://zenodo.org/api/records/4656262/files/m3_quarterly_dataset.zip/content",
+            "series_compared": 756,
+            "values_compared": 37004,
+            "values_identical": 37004
+          }
+        },
+        "series_ids": "official M3 ids, zero-padded (N 646 -> N0646); row k is the positional id Qk of datasetsforecast and the earlier runs (rows checked to be in id order)",
+        "sha256": "23bfbba215dad49eb9b0f315a3e38bcc541f78f4689b168616ef25a5e8f293a6",
+        "sheet": "M3Quart",
+        "source": "M3C.xls, International Institute of Forecasters (supplied file; the site refuses scripted downloads)",
+        "source_page": "https://forecasters.org/resources/time-series-data/m3-competition/",
+        "start_labels": {
+          "no_start_date_labels_are_positions": [],
+          "start_period_carried_over": [
+            "N1071"
+          ]
+        }
+      },
+      "rows": 37004,
+      "sha256": "5c1d03ea528206f5cba4a173ed46535daf2c592e9919a4cae582990ab244490d",
+      "y_max": 20375.0,
+      "y_min": 121.0
+    },
+    "M4_Monthly": {
+      "bytes": 44797893,
+      "content_sha256": "1aefb319aae5a86112b1cdbef533bf5e70a30185414f4163444f4288cdc3f63f",
+      "file": "M4_Monthly.parquet",
+      "frequency": "monthly",
+      "horizon": 18,
+      "length_max": 2812,
+      "length_median": 220.0,
+      "length_min": 60,
+      "n_series": 48000,
+      "provenance": {
+        "parser": "src.data.freeze_data.read_m4_official",
+        "source_urls": [
+          "https://raw.githubusercontent.com/Mcompetitions/M4-methods/master/Dataset//Train/Monthly-train.csv",
+          "https://raw.githubusercontent.com/Mcompetitions/M4-methods/master/Dataset//Test/Monthly-test.csv",
+          "https://raw.githubusercontent.com/Mcompetitions/M4-methods/master/Dataset//M4-info.csv",
+          "https://github.com/Nixtla/m4-forecasts/raw/master/forecasts/submission-Naive2.zip"
+        ]
+      },
+      "rows": 11246411,
+      "sha256": "3ba84721c480b14ef4c2c5b61830302033b99a2154368aa0bc51d8ab297e5709",
+      "y_max": 177950.0,
+      "y_min": 20.0
+    },
+    "M4_Quarterly": {
+      "bytes": 10124580,
+      "content_sha256": "756584ca22be7dbd0342f4ade065e9e8c0b5c41c42a8947654544622aa4d64a7",
+      "file": "M4_Quarterly.parquet",
+      "frequency": "quarterly",
+      "horizon": 8,
+      "length_max": 874,
+      "length_median": 96.0,
+      "length_min": 24,
+      "n_series": 24000,
+      "provenance": {
+        "parser": "src.data.freeze_data.read_m4_official",
+        "source_urls": [
+          "https://raw.githubusercontent.com/Mcompetitions/M4-methods/master/Dataset//Train/Quarterly-train.csv",
+          "https://raw.githubusercontent.com/Mcompetitions/M4-methods/master/Dataset//Test/Quarterly-test.csv",
+          "https://raw.githubusercontent.com/Mcompetitions/M4-methods/master/Dataset//M4-info.csv",
+          "https://github.com/Nixtla/m4-forecasts/raw/master/forecasts/submission-Naive2.zip"
+        ]
+      },
+      "rows": 2406108,
+      "sha256": "c8195e099fd95d1f8283ea847decacbc0f9179d0b939c04f61f484d4c9956cc6",
+      "y_max": 82210.7,
+      "y_min": 19.5
+    }
+  },
+  "raw_files": [
+    {
+      "bytes": 1757696,
+      "path": "m3/M3C.xls",
+      "sha256": "23bfbba215dad49eb9b0f315a3e38bcc541f78f4689b168616ef25a5e8f293a6"
+    },
+    {
+      "bytes": 3723054,
+      "path": "m3/Mcomp_2.7.tar.gz",
+      "sha256": "2177b210a612a47a1e9885e2aea6d3f7f9154090fd3d8e629a5909cfc04768af"
+    },
+    {
+      "bytes": 727389,
+      "path": "m3/Mcomp_2.7_M3.rda",
+      "sha256": "e2693e75fc0fc07d6379dd70f76d23ae4e04e03e5bceaf58b69fdf39b1a25c41"
+    },
+    {
+      "bytes": 960208,
+      "path": "m3/datasets/m3_monthly_dataset.tsf",
+      "sha256": "962e5e217d3c98780ef240416daa4773a8e65961ea47e0a769178be58622d9c5"
+    },
+    {
+      "bytes": 336324,
+      "path": "m3/datasets/m3_monthly_dataset.zip",
+      "sha256": "80b0c1c92b6273f12d346256d3ee29489a7b081823430ad8b3a1cc01e06ccafd"
+    },
+    {
+      "bytes": 253744,
+      "path": "m3/datasets/m3_quarterly_dataset.tsf",
+      "sha256": "f2c52d0e4c8e948cd66dab139459609b71efbbf063f19927b8bd5d71d0512f16"
+    },
+    {
+      "bytes": 96124,
+      "path": "m3/datasets/m3_quarterly_dataset.zip",
+      "sha256": "c59f208d1ad3d38ff039e0bdc9e356fe7c83019ecd2dcae0a930b607c22b50c2"
+    },
+    {
+      "bytes": 4335598,
+      "path": "m4/datasets/M4-info.csv",
+      "sha256": "26a75cc9b9f65e351b39b0bdbb7e3464ac837df0baf541ab55abdd2ba1a14c88"
+    },
+    {
+      "bytes": 7942698,
+      "path": "m4/datasets/Monthly-test.csv",
+      "sha256": "5e3538bf23b4a09f4078180c3e2b34859f0382e1c4f22564affc1797e8f3f48f"
+    },
+    {
+      "bytes": 91655432,
+      "path": "m4/datasets/Monthly-train.csv",
+      "sha256": "63aaa56198b4a22279a2fec541f56921f3bed6d8e0f84e550206df9276f2e9b9"
+    },
+    {
+      "bytes": 1971754,
+      "path": "m4/datasets/Quarterly-test.csv",
+      "sha256": "bf1cab3b969a744c220cdc148e3829803eaa5da2754270fc4f376e775cd7d0ae"
+    },
+    {
+      "bytes": 38788547,
+      "path": "m4/datasets/Quarterly-train.csv",
+      "sha256": "4450678cd493aa965c14bde984a5b62a66d8c3b2f7af1e53779bc91ff008ccdc"
+    },
+    {
+      "bytes": 23409576,
+      "path": "m4/datasets/submission-Naive2.csv",
+      "sha256": "f9610c625d6dee654ec458dcd07fb39373d065efc33b4f17d94c50b2aef00ef9"
+    },
+    {
+      "bytes": 3564691,
+      "path": "m4/datasets/submission-Naive2.zip",
+      "sha256": "120efea982b419e0f989505249ade55cdbd0727ea8597f75bdf7bef25b05867c"
+    }
+  ]
+}
