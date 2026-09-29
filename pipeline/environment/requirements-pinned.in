@@ -81,6 +81,10 @@ pytorch-lightning==2.5.6
 pytz==2026.2
 PyYAML==6.0.3
 ray==2.55.1
+# rdata and xarray: added 29 Sep 2026 (protocol D2, amended in v1.3), data
+# preparation only. rdata reads M3 from the R data file of Mcomp 2.7 (CRAN);
+# xarray is its dependency. Adding them changed no other pin in the lock.
+rdata==0.11.2
 referencing==0.37.0
 requests==2.34.2
 rpds-py==0.30.0
@@ -105,6 +109,7 @@ typing_extensions==4.15.0
 tzdata==2026.2
 urllib3==2.7.0
 utilsforecast==0.2.16
+xarray==2026.7.0
 xgboost==3.2.0
 xlrd==2.0.2
 yarl==1.24.2
