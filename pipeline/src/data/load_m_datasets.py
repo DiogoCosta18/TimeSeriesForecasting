@@ -1,91 +1,78 @@
+"""Load the M3 and M4 series of one frequency from the verified frozen copy (protocol D2).
+
+This is the experiment's only entry point to the data. It reads through
+``src.data.frozen``, which checks every file against the committed manifest, and
+raises ``FrozenDataError`` on any problem. There is no download, no local-CSV
+path and no synthetic substitute: if the frozen copy is absent or altered, the
+run stops.
+
+The returned ``ds`` column is a regular calendar rebuilt from the position ``t``
+(same origin and frequency for M3 and M4), so it carries no information beyond
+the order of the observations. The source time stamps stay in the frozen files
+for traceability only.
+"""
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
-import numpy as np
 import pandas as pd
 
+from src.data.frozen import DEFAULT_MANIFEST, FrozenDataError, load_frequency, load_manifest, sha256_file
 
-def _periods(freq: str, n: int) -> pd.DatetimeIndex:
-    return pd.date_range("1990-01-01", periods=n, freq="MS" if freq == "monthly" else "QS")
-
-
-def _synthetic_source(source: str, frequency: str, n_series: int, seed: int) -> pd.DataFrame:
-    rng = np.random.default_rng(seed)
-    season_length = 12 if frequency == "monthly" else 4
-    n_obs = 96 if frequency == "monthly" else 56
-    frames = []
-    for i in range(n_series):
-        uid = f"{source}_{frequency.title()}_S{i:04d}"
-        ds = _periods(frequency, n_obs)
-        t = np.arange(n_obs)
-        amp = rng.uniform(2, 12)
-        trend = rng.normal(0.04, 0.03) * t
-        seasonal = amp * np.sin(2 * np.pi * t / season_length + rng.uniform(0, np.pi))
-        nonlin = 0.03 * np.maximum(t - n_obs * rng.uniform(0.35, 0.75), 0) ** 1.25
-        noise_scale = rng.uniform(0.5, 2.0) * (1 + 0.6 * np.sin(2 * np.pi * t / max(8, season_length * 3)) ** 2)
-        y = 50 + trend + seasonal + nonlin + rng.normal(0, noise_scale)
-        if i % 9 == 0:
-            y[int(n_obs * 0.6) :] += rng.normal(8, 3)
-        frames.append(pd.DataFrame({"unique_id": uid, "ds": ds, "y": y, "source_dataset": source}))
-    return pd.concat(frames, ignore_index=True)
+DATA_DIR_ENV = "RERUN_DATA_DIR"
+# The origin is arbitrary; 1900 keeps the longest M4 monthly series (~2,800 months)
+# plus any forecast horizon well inside pandas' timestamp range (year 2262).
+CALENDAR_ORIGIN = pd.Timestamp("1900-01-31")
+CALENDAR_FREQ = {"monthly": "ME", "quarterly": "QE"}
+OUTPUT_COLUMNS = ["unique_id", "ds", "y", "source_dataset", "t"]
 
 
-def _load_m4_local(root: Path, group: str, frequency: str) -> pd.DataFrame | None:
-    path = root.parent / "m4" / "datasets" / f"{group}-train.csv"
-    if not path.exists():
-        return None
-    raw = pd.read_csv(path)
-    id_col = raw.columns[0]
-    value_cols = [c for c in raw.columns if c != id_col]
-    records = []
-    for _, row in raw.iterrows():
-        vals = pd.to_numeric(row[value_cols], errors="coerce").dropna().to_numpy(dtype=float)
-        ds = _periods(frequency, len(vals))
-        uid = f"M4_{group}_{row[id_col]}"
-        records.append(pd.DataFrame({"unique_id": uid, "ds": ds, "y": vals, "source_dataset": f"M4_{group}"}))
-    return pd.concat(records, ignore_index=True) if records else None
+def resolve_data_dir(data_dir: Path | str | None = None) -> Path:
+    """The folder that holds ``frozen/``: the explicit argument, else ``$RERUN_DATA_DIR``."""
+    if data_dir is None:
+        data_dir = os.environ.get(DATA_DIR_ENV) or None
+    if data_dir is None:
+        raise FrozenDataError(
+            f"no frozen data location: pass --data-dir or set {DATA_DIR_ENV} "
+            "to the folder that contains frozen/ and MANIFEST.json"
+        )
+    path = Path(data_dir)
+    if not (path / "frozen").is_dir():
+        raise FrozenDataError(f"{path} has no frozen/ folder")
+    return path
 
 
-def _load_with_datasetsforecast(group: str, source: str, root: Path) -> pd.DataFrame | None:
-    try:
-        if source == "M3":
-            from datasetsforecast.m3 import M3
-
-            y_df, *_ = M3.load(directory=str(root / "datasetsforecast"), group=group)
-        else:
-            from datasetsforecast.m4 import M4
-
-            y_df, *_ = M4.load(directory=str(root / "datasetsforecast"), group=group)
-        y_df = y_df.rename(columns={"unique_id": "unique_id", "ds": "ds", "y": "y"})
-        y_df["unique_id"] = f"{source}_{group}_" + y_df["unique_id"].astype(str)
-        y_df["source_dataset"] = f"{source}_{group}"
-        return y_df[["unique_id", "ds", "y", "source_dataset"]]
-    except Exception:
-        return None
-
-
-def load_dataset_pair(frequency_cfg: dict, project_root: Path, seed: int, smoke_min: int = 40) -> pd.DataFrame:
+def load_dataset_pair(
+    frequency_cfg: dict,
+    data_dir: Path | str | None = None,
+    manifest: dict | None = None,
+) -> pd.DataFrame:
+    """All M3 and M4 series of ``frequency_cfg['frequency']``, verified, sorted by (unique_id, t)."""
     frequency = frequency_cfg["frequency"]
-    group_m3 = frequency_cfg["m3_group"]
-    group_m4 = frequency_cfg["m4_group"]
-    parts: list[pd.DataFrame] = []
-    force_synthetic = bool(frequency_cfg.get("force_synthetic", False))
+    if frequency not in CALENDAR_FREQ:
+        raise FrozenDataError(f"unsupported frequency {frequency!r}")
+    manifest = load_manifest() if manifest is None else manifest
+    expected = {f"M3_{frequency_cfg['m3_group']}", f"M4_{frequency_cfg['m4_group']}"}
+    listed = {k for k, e in manifest["frozen_files"].items() if e["frequency"] == frequency}
+    if listed != expected:
+        raise FrozenDataError(f"{frequency}: configuration expects sources {sorted(expected)}, manifest lists {sorted(listed)}")
 
-    m3 = None if force_synthetic else _load_with_datasetsforecast(group_m3, "M3", project_root)
-    if m3 is None:
-        m3 = _synthetic_source(f"M3_{group_m3}", frequency, max(smoke_min, frequency_cfg.get("n_m3_requested", 750)), seed + 3)
-    parts.append(m3)
+    df = load_frequency(resolve_data_dir(data_dir) / "frozen", frequency, manifest)
+    calendar = pd.date_range(CALENDAR_ORIGIN, periods=int(df["t"].max()), freq=CALENDAR_FREQ[frequency])
+    df["ds"] = calendar[df["t"].to_numpy() - 1]
+    return df[OUTPUT_COLUMNS]
 
-    m4 = None if force_synthetic else _load_with_datasetsforecast(group_m4, "M4", project_root)
-    if m4 is None:
-        m4 = None if force_synthetic else _load_m4_local(project_root, group_m4, frequency)
-    if m4 is None:
-        m4 = _synthetic_source(f"M4_{group_m4}", frequency, max(smoke_min, frequency_cfg.get("n_m4_requested", 750)), seed + 7)
-    parts.append(m4)
 
-    out = pd.concat(parts, ignore_index=True)
-    out["ds"] = pd.to_datetime(out["ds"])
-    out["y"] = pd.to_numeric(out["y"], errors="coerce")
-    out = out.dropna(subset=["unique_id", "ds", "y"]).sort_values(["unique_id", "ds"]).reset_index(drop=True)
-    return out
+def frozen_data_provenance(manifest_path: Path = DEFAULT_MANIFEST) -> dict:
+    """What a run records about the data it read: manifest identity and per-file checksums."""
+    manifest = load_manifest(manifest_path)
+    return {
+        "manifest_file": Path(manifest_path).name,
+        "manifest_sha256": sha256_file(manifest_path),
+        "dataset_version": manifest.get("dataset_version"),
+        "frozen_files": {
+            key: {"sha256": e["sha256"], "content_sha256": e["content_sha256"], "n_series": e["n_series"], "rows": e["rows"]}
+            for key, e in sorted(manifest["frozen_files"].items())
+        },
+    }
