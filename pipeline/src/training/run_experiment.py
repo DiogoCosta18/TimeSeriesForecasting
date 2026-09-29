@@ -8,7 +8,8 @@ import numpy as np
 import pandas as pd
 
 from src.cli import CliArgs
-from src.data.load_m_datasets import load_dataset_pair
+from src.data.frozen import load_manifest
+from src.data.load_m_datasets import frozen_data_provenance, load_dataset_pair
 from src.data.sample_series import assign_feature_buckets, representative_sample
 from src.data.schemas import FEATURE_NAMES, MODEL_FAMILIES
 from src.data.validation import make_cutoffs
@@ -63,8 +64,6 @@ def _apply_budget_to_frequency(freq_cfg: dict, budget: str) -> dict:
     out["n_m3_requested"] = min(out.get("n_m3_requested", 750), b["n_per_source"])
     out["n_m4_requested"] = min(out.get("n_m4_requested", 750), b["n_per_source"])
     out["n_windows"] = min(out.get("n_windows", 3), b["n_windows"])
-    if budget == "smoke":
-        out["force_synthetic"] = True
     return out
 
 
@@ -232,11 +231,12 @@ def run_experiment(cfg_raw: dict, args: CliArgs) -> Path:
     sample_parts = []
     candidate_parts = []
     cutoff_parts = []
-    data_manifest = {"run_id": run_id, "datasets": []}
+    frozen_manifest = load_manifest()
+    data_manifest = {"run_id": run_id, "frozen_data": frozen_data_provenance(), "datasets": []}
 
     for freq, fcfg in freq_cfgs.items():
         cp.status({"stage": f"load_features_{freq}", "frequency": freq}, 1)
-        data = load_dataset_pair(fcfg, Path.cwd(), int(cfg["random_seed"]))
+        data = load_dataset_pair(fcfg, args.data_dir, frozen_manifest)
         data = _limit_candidate_series_for_feature_compute(
             data,
             feature_compute["max_candidate_series_per_source"],

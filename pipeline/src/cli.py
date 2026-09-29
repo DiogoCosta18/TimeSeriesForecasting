@@ -25,6 +25,7 @@ class CliArgs:
     debug: bool
     dry_run: bool
     strict_model_mode: bool | None = None
+    data_dir: Path | None = None
 
 
 def _csv(value: str | None) -> list[str] | None:
@@ -51,6 +52,7 @@ def parse_args(argv: list[str] | None = None) -> CliArgs:
     p.add_argument("--debug", default="false")
     p.add_argument("--dry-run", default="false")
     p.add_argument("--strict-model-mode", default=None)
+    p.add_argument("--data-dir", help="folder holding the frozen M3/M4 copy (default: $RERUN_DATA_DIR)")
     ns = p.parse_args(argv)
     return CliArgs(
         config=Path(ns.config),
@@ -69,6 +71,7 @@ def parse_args(argv: list[str] | None = None) -> CliArgs:
         debug=truthy(ns.debug),
         dry_run=truthy(ns.dry_run),
         strict_model_mode=truthy(ns.strict_model_mode) if ns.strict_model_mode is not None else None,
+        data_dir=Path(ns.data_dir) if ns.data_dir else None,
     )
 
 
