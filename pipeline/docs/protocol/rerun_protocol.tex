@@ -28,7 +28,7 @@
 \pagestyle{fancy}
 \fancyhf{}
 \fancyhead[L]{\small\color{accent}Rerun protocol --- STL decomposition study}
-\fancyhead[R]{\small\color{accent}v1.3 --- for supervisor sign-off}
+\fancyhead[R]{\small\color{accent}v1.4 --- for supervisor sign-off}
 \fancyfoot[C]{\small\thepage}
 \renewcommand{\headrulewidth}{0.4pt}
 
@@ -51,7 +51,7 @@
 \large When Does Seasonal Decomposition Help?\\
 Pipeline decisions, measurement and analysis plan, implementation,\\ testing, pilot and full runs}
 \author{Prepared for D.\ Costa, the supervisor, and the partner university team}
-\date{Version 1.3 --- 29 September 2026 --- all decisions taken; awaiting supervisor sign-off}
+\date{Version 1.4 --- 29 September 2026 --- all decisions taken; awaiting supervisor sign-off}
 
 \begin{document}
 \maketitle
@@ -183,7 +183,7 @@ ID & Topic & Decision & Rationale & By \\
 \endfoot
 \multicolumn{5}{@{}l}{\emph{Scope and data}}\\
 D1 & Reuse & Full rerun. Legacy statistical forecasts used only as a regression check (I2). & Section~\ref{sec:purpose}. & Team \\
-D2 & Data & M3 and M4, monthly ($m=12$, $h=18$) and quarterly ($m=4$, $h=8$) only. One frozen copy, stored with SHA-256 checksums; every machine loads the same bytes. M3 from Mcomp~2.7 with official ids, cross-checked against the Monash copy; M4 from the official competition files (amended in v1.3). & No new frequencies or loaders to validate; a changed mirror cannot change the data; exact M3 values without the Monash sign error. & Team \\
+D2 & Data & M3 and M4, monthly ($m=12$, $h=18$) and quarterly ($m=4$, $h=8$) only. One frozen copy, stored with SHA-256 checksums; every machine loads the same bytes. M3 from the original competition file \code{M3C.xls} with official ids, cross-checked against the Monash and Mcomp copies; M4 from the official competition files (amended in v1.3 and v1.4). & No new frequencies or loaders to validate; a changed mirror cannot change the data; the M3 data exactly as published. & Team \\
 D3 & Eligibility & A series is eligible if its history before the first test window has at least $L = 3m+h$ points: 54 monthly, 20 quarterly. & Every STL fit sees $\geq 2$ seasons; tuning data holds $\geq 3m$ points; evolving seasonality gets $\geq 2$ rolling windows. Fixes C4, M4. & Protocol \\
 D4 & Features & Definitions unchanged. Computed once, on the pre-window-0 history, for every eligible series. A series with any non-``ok'' quality flag is ineligible. & Fixes C3 and F1; buckets fixed across windows; the follow-up gets features for the whole pool. & Team \\
 D5 & Feature guards & Option A: quarterly minimum lengths lowered to 20 (nonlinearity from 30, ARCH from 24); monthly guards ($\leq 48$) unchanged. Sensitivity analysis A7. & Keeps 600 per source and three windows (Section~\ref{sec:eligibility}). & Team \\
@@ -230,26 +230,29 @@ together with SHA-256 checksums, and loaded from that frozen copy on every machi
 is written into the manifest and every result row. Loading verifies it and refuses a mismatch
 (test U18).
 
-\emph{Sources (D2, amended in v1.3).} M3 is taken from the R package Mcomp~2.7 (CRAN archive;
-R.~J.~Hyndman), the standard redistribution of the M3 competition data: training and test values
-of every series, official ids (\code{N0646}, \dots) and start periods. The archive is refused unless
-its SHA-256 equals the value pinned in the code. The earlier runs read M3 from the Monash Time
-Series Forecasting Archive through \code{datasetsforecast}; a comparison of every value showed
-that this path rounded 44,034 values to single precision (relative error ${\le}\,5.7\times10^{-8}$)
-and that the Monash file carries one sign error, series N2786 at $t=84$ (a test value): $-1200$
-where Mcomp has $1200$ (defect m7). The Monash file is therefore kept only as an independent check:
-at full precision it must equal Mcomp bit for bit except for that documented value, or the freeze
-stops; it does (204,565 of 204,566 values identical). A comparison with the original competition
-file \code{M3C.xls} (International Institute of Forecasters) is added when that file is available.
-Series are named by their official M3 ids; Mcomp's field \code{st} holds the positional ids of the
-earlier runs (\code{M1}, \dots) and is checked to follow the official-id order, so old and new ids
-map one-to-one. M4 is taken from the official competition files (\code{Mcompetitions/M4-methods},
-\code{Dataset/Train} and \code{Dataset/Test}) and read by \code{read_m4_official}\footnote{\code{src/data/freeze_data.py};
-\code{M4.load} of \code{datasetsforecast} melts the whole wide table and was stopped by the
-out-of-memory killer on a machine with 7.6\,GiB.}, which returns exactly what \code{M4.load} returns
-(checked against \code{M4.load} itself in the tests and, for M4 Quarterly, on the real files) and in
-addition refuses a training row with a gap, a test row without exactly $h$ finite values, and ids that
-are duplicated or not matched one-to-one.
+\emph{Sources (D2, amended in v1.3 and v1.4).} M3 is taken from the original competition file
+\code{M3C.xls} of the International Institute of Forecasters (M3 competition page), which holds the
+training and test values of every series, the official ids (\code{N0646}, \dots) and start periods.
+The site refuses scripted downloads, so the file is supplied to the freeze, which refuses it unless its
+SHA-256 equals the value pinned in the code and stores it with the raw files. Two further copies are
+compared with it value by value, and the freeze stops on any difference that is not documented: the
+Monash Time Series Forecasting Archive copy on Zenodo, which the earlier runs used, is identical at full
+precision (204,566 of 204,566 values); Mcomp~2.7 (CRAN; R.~J.~Hyndman) differs in one value, series
+N2786 at $t=84$ (a test value), where it has $1200$ and the original $-1200$, without a note in its
+change log. The earlier runs read the Monash file through \code{datasetsforecast}, whose reader
+rounded 44,034 values to single precision (relative error ${\le}\,5.7\times10^{-8}$; defect m7); the
+freeze reads it at full precision. Series are named by their official M3 ids; the rows of
+\code{M3C.xls} are checked to be in official-id order, so the positional ids of the earlier runs
+(\code{M1}, \dots) map one-to-one onto official ids, as Mcomp's field \code{st} confirms. The start
+labels are kept as given, except that N1071's ``quarter 9 of 1984'' is carried into 1986-Q1; the 29
+monthly series without a start date keep their positions as labels. M4 is taken from the official
+competition files (\code{Mcompetitions/M4-methods}, \code{Dataset/Train} and \code{Dataset/Test}) and read
+by \code{read_m4_official}\footnote{\code{src/data/freeze_data.py}; \code{M4.load} of
+\code{datasetsforecast} melts the whole wide table and was stopped by the out-of-memory killer on a
+machine with 7.6\,GiB.}, which returns exactly what \code{M4.load} returns (checked against
+\code{M4.load} itself in the tests and, for M4 Quarterly, on the real files) and in addition refuses a
+training row with a gap, a test row without exactly $h$ finite values, and ids that are duplicated or
+not matched one-to-one.
 
 \emph{Validation and layout.} Both sources are complete series: the competition's test period is part
 of every series, and the rolling-origin windows of Section~\ref{sec:forecasting} are cut from them.
@@ -260,7 +263,7 @@ complete. Each source is stored as one file with columns \code{unique_id}, \code
 \code{frequency}, position \code{t} $=1,\dots,n$, \code{y} and the source's time label (kept for
 traceability only). The manifest (\mbox{\code{pipeline/data_manifest/m3m4_v1.json}}) records the SHA-256 of
 every raw download and every frozen file, a content hash that does not depend on the file format,
-the result of the M3 cross-check, and the code commit and package versions that produced the copy.
+the results of the M3 cross-checks, and the code commit and package versions that produced the copy.
 The pipeline uses only the order of observations: the loader rebuilds one regular calendar from
 \code{t}, identical for M3 and M4, and has no fallback of any kind (defect F4,
 Appendix~\ref{app:defects}).
@@ -490,7 +493,7 @@ starting from an unmodified baseline commit; the paper and the code therefore sh
 the results record the commit that produced them (D22). The environment is pinned to the versions of the valid May runs:
 Python 3.11.10, torch 2.5.1+cu121, mlforecast 1.0.31, neuralforecast 3.1.8, statsforecast 2.0.3,
 optuna 4.8.0, statsmodels 0.14.6, scikit-learn 1.8.0, numpy 2.4.6, pandas 2.3.3, scipy 1.15.3,
-ruptures 1.1.10 and datasetsforecast 1.0.1, plus rdata 0.11.2 for reading M3 (added in v1.3). A lockfile is committed and its hash is stored in every
+ruptures 1.1.10 and datasetsforecast 1.0.1, plus rdata 0.11.2 for the Mcomp cross-check (added in v1.3); \code{M3C.xls} is read with xlrd 2.0.2. A lockfile is committed and its hash is stored in every
 row. The same image is used on every machine, and all machines load the frozen data copy (D2).
 
 %=====================================================================
@@ -665,7 +668,7 @@ File & Change & Fixes \\
 \endhead
 \bottomrule
 \endfoot
-\code{src/data/freeze_data.py} (new) & One-off download of M3/M4 into the cloud bucket with SHA-256 checksums; validation; M3 from Mcomp with the Monash cross-check; memory-safe M4 reader. & D2, m7 \\
+\code{src/data/freeze_data.py} (new) & One-off download of M3/M4 into the cloud bucket with SHA-256 checksums; validation; M3 from \code{M3C.xls} with the Monash and Mcomp cross-checks; memory-safe M4 reader. & D2, m7 \\
 \code{src/data/frozen.py} (new) & Canonical layout, content hash, verified loading. & D2 \\
 \code{src/data/load_m_datasets.py} & Load only from the frozen copy; verify checksums; refuse a mismatch; one regular calendar from the position. & D2, F4, m6 \\
 \code{src/data/eligibility.py} (new) & Eligibility table: length rule $L$, feature flags; refuses ineligible series downstream. & C4, M4, F1 \\
@@ -1074,7 +1077,7 @@ m3 & Rebuild merges runs without provenance checks. & \code{rebuild_paper_data.p
 m4 & Analysis scripts not versioned. & --- \\
 m5 & No logs kept for the 28--30 May runs. & --- \\
 m6 & M4 time stamps (integer positions) were converted to nanosecond date-times, so a task's inferred frequency depended on which series came first. No effect on forecasts found (global training frames are rebuilt on a regular calendar and no model uses calendar inputs), but fragile. Found while implementing D2 (v1.3). & \code{load_m_datasets.py:88}; \code{train_family.py:235}; \code{global_adapter_data.py:26}. \\
-m7 & M3 values of the earlier runs: rounded to single precision by the TSF reader of \code{datasetsforecast} (29,051 monthly and 14,983 quarterly values; relative error ${\le}\,5.7\times10^{-8}$), and one sign error in the Monash file (N2786, $t=84$, a test value: $-1200$ instead of $1200$). The rounding changes values in the eighth significant digit; the sign error changes one test value of one series. Found while implementing D2 (v1.3). & Every value compared with Mcomp~2.7; \code{np.float32} in \code{datasetsforecast/utils.py}. \\
+m7 & M3 values of the earlier runs were rounded to single precision by the TSF reader of \code{datasetsforecast} (29,051 monthly and 14,983 quarterly values; relative error ${\le}\,5.7\times10^{-8}$, i.e.\ the eighth significant digit). Found while implementing D2 (v1.3). Corrected in v1.4: v1.3 also listed the value $-1200$ of N2786 at $t=84$ as a sign error in the Monash file; it is the value of the original \code{M3C.xls}. & Every value compared with \code{M3C.xls}; \code{np.float32} in \code{datasetsforecast/utils.py}. \\
 \end{longtable}
 }
 
@@ -1082,7 +1085,7 @@ m7 & M3 values of the earlier runs: rounded to single precision by the TSF reade
 \section{Decision record: alternatives considered}\label{app:alternatives}
 %=====================================================================
 
-The questions put to D.\ Costa on 28 September 2026 (rows marked v1.3: 29 September), the option chosen, and the alternatives
+The questions put to D.\ Costa on 28 September 2026 (rows marked v1.3 or v1.4: 29 September), the option chosen, and the alternatives
 rejected. A rejected alternative may only be adopted later through the change log.
 
 {\small
@@ -1100,7 +1103,7 @@ Dec. & Question & Chosen & Rejected alternatives (and why they were on the table
 D1 & Reuse old results? & Full rerun & Reuse the 25 May strict run and add missing arms (different samples, C3/C4 remain). \\
 D2 & Datasets & M3+M4 monthly and quarterly & Add M4 yearly as a negative control; add weekly/daily (needs MSTL). \\
 D2 & Data source & Frozen copy with checksums & Download at run time (a changed mirror would change the data). \\
-D2 & M3 source (v1.3) & Mcomp 2.7 (CRAN), Monash as a cross-check & Monash through \code{datasetsforecast}, as in the earlier runs (single-precision rounding, one sign error); Monash at full precision with a documented one-value correction (we would edit a benchmark value ourselves); Monash as published (keeps a probable error in a test value). \\
+D2 & M3 source (v1.4) & Original \code{M3C.xls} (IIF); Monash and Mcomp as cross-checks & Monash as the source (identical values, but a redistribution); Mcomp~2.7 (differs from the original in one value without documentation; chosen in v1.3 on the mistaken premise that Monash had an error); Monash through \code{datasetsforecast}, as in the earlier runs (single-precision rounding). \\
 D2 & M3 ids (v1.3) & Official M3 ids (\code{N1402}, \dots) & Positional ids of the earlier runs (\code{M1}, \dots), which do not match the literature. \\
 D5 & Short quarterly series & A: guards lowered to 20 & B: two quarterly windows; C: original guards (M3 Quarterly $\approx$116); D: 400 per source. \\
 D4 & When features are computed & Once, before window 0 & Recomputed every window (bucket membership would change). \\
@@ -1152,6 +1155,7 @@ Version & Date & Change \\
 1.1 & 28 Sep 2026 & All open decisions taken in eight rounds of questions: D5 confirmed (option A); new decisions D25--D30 (ML inputs, practical threshold, aggregation, selector, release, sign-off); D2, D8, D11--D13, D15--D17, D20--D24 made explicit; Friedman + Nemenyi rankings (H7) and seed check (A15) added; gates G13 and tests U18--U19 added; timeline moved to start on the day of sign-off; Appendix~\ref{app:alternatives} added. \\
 1.2 & 28 Sep 2026 & D22 amended on instruction of D.\ Costa: the pipeline lives in the new folder \code{pipeline/} of the existing project repository (\code{github.com/DiogoCosta18/TimeSeriesForecasting}), branch \code{rerun-v2}, instead of a new dedicated repository. Consequence: sharing the code with the partner university means sharing the repository, paper workspace included. Sections 1.2, 4.6, 6.1, the timeline and Appendix~\ref{app:alternatives} updated accordingly. \\
 1.3 & 29 Sep 2026 & D2 amended on instruction of D.\ Costa after the M3 comparison: M3 from Mcomp~2.7 (CRAN) with official ids, the Monash copy kept as a bit-for-bit cross-check; rdata 0.11.2 and xarray 2026.7.0 added to the lock (no other pin changed); Appendix~\ref{app:alternatives} extended. Recorded while implementing D2: defects F4 (silent synthetic-data fallback in the loader; shown to be latent), m6 (M4 time stamps) and m7 (M3 values of the earlier runs) added to Appendix~\ref{app:defects} and to the traceability table; Section~\ref{sec:data} describes the frozen copy as implemented (sources, validation, file layout, manifest, order-only calendar); U18 extended; the rule for inherited tests and the four failing baseline tests stated in Section~\ref{sec:testing}; module table updated. \\
+1.4 & 29 Sep 2026 & Correction of 1.3. The statement that the Monash file carries a sign error was wrong: the original competition file \code{M3C.xls} (IIF), obtained the same day, has $-1200$ at N2786, $t=84$, and Monash reproduces it exactly; Mcomp~2.7 is the copy that differs ($+1200$, undocumented). D2 decided again by D.\ Costa: M3 from \code{M3C.xls} (pinned SHA-256), with Monash (identical) and Mcomp (one documented difference) as cross-checks that stop the freeze on any other difference. Section~\ref{sec:data}, the decision register, defect m7, the environment paragraph, the module table and Appendix~\ref{app:alternatives} corrected accordingly. \\
  & & \\
 \bottomrule
 \end{tabularx}

@@ -27,9 +27,10 @@ the running environment differs from it in any package.
 - The CUDA 12.1 libraries and `triton 3.1.0` are the exact versions torch
   2.5.1+cu121 declares; the resolver adds them.
 - `rdata 0.11.2` and `xarray 2026.7.0` are not from the May machine: they were
-  added on 29 Sep 2026 for data preparation only (M3 is read from the R data
-  file of Mcomp 2.7; protocol D2, amended in v1.3). Adding them changed no other
-  pin.
+  added on 29 Sep 2026 for data preparation only. rdata reads the M3 data of
+  Mcomp 2.7, which the freeze compares with the original `M3C.xls` (read with
+  xlrd 2.0.2, already in the lock); protocol D2, amended in v1.3 and v1.4.
+  Adding them changed no other pin.
 
 ## Build the environment
 
