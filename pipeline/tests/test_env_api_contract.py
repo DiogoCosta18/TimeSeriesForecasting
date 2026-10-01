@@ -70,6 +70,58 @@ def test_mlforecast_auto_models_exist(cls):
     _attr("mlforecast.auto", cls)
 
 
+# Every value or bound of the ML search spaces (protocol Table 6).
+ML_SPACES = {
+    ("sklearn.linear_model", "Ridge"): {"alpha": [1e-3, 1e2]},
+    ("sklearn.linear_model", "LinearRegression"): {},
+    ("sklearn.ensemble", "RandomForestRegressor"): {
+        "n_estimators": [100, 300],
+        "max_depth": [None, 10, 20],
+        "min_samples_leaf": [1, 5, 20],
+        "max_features": [1.0, 0.5, "sqrt"],
+    },
+    ("xgboost", "XGBRegressor"): {
+        "n_estimators": [100, 600],
+        "learning_rate": [0.01, 0.3],
+        "max_depth": [3, 9],
+        "subsample": [0.6, 1.0],
+        "colsample_bytree": [0.6, 1.0],
+    },
+}
+
+
+def _signature_owner(module: str, cls: str):
+    est = _attr(module, cls)
+    if cls == "XGBRegressor":
+        # XGBRegressor.__init__ takes **kwargs; the parameters are declared on XGBModel.
+        base = _attr("xgboost", "XGBModel")
+        assert issubclass(est, base)
+        return base
+    return est
+
+
+@pytest.mark.parametrize("module, cls", sorted(ML_SPACES))
+def test_ml_estimator_arguments(module, cls):
+    missing = set(ML_SPACES[(module, cls)]) - _params(_signature_owner(module, cls))
+    assert not missing, f"{module}.{cls} lacks {missing}"
+
+
+@pytest.mark.parametrize("module, cls", sorted(ML_SPACES))
+def test_ml_estimators_accept_every_value_of_their_space(module, cls):
+    import numpy as np
+
+    rng = np.random.default_rng(0)
+    X = rng.normal(size=(60, 12))
+    y = X[:, 0] + 0.1 * rng.normal(size=60)
+    est_cls = _attr(module, cls)
+    settings = [{}] + [{name: value} for name, values in ML_SPACES[(module, cls)].items() for value in values]
+    for setting in settings:
+        est = est_cls(**setting)
+        assert all(est.get_params()[k] == v for k, v in setting.items()), setting
+        prediction = est.fit(X, y).predict(X)
+        assert np.isfinite(prediction).all(), setting
+
+
 # --- neural and transformer families (Table 5, Table 6) ------------------------------
 
 COMMON_NEURAL = {
