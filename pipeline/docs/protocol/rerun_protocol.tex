@@ -28,7 +28,7 @@
 \pagestyle{fancy}
 \fancyhf{}
 \fancyhead[L]{\small\color{accent}Rerun protocol --- STL decomposition study}
-\fancyhead[R]{\small\color{accent}v1.4 --- for supervisor sign-off}
+\fancyhead[R]{\small\color{accent}v1.5 --- approved (v1.4) + change log}
 \fancyfoot[C]{\small\thepage}
 \renewcommand{\headrulewidth}{0.4pt}
 
@@ -51,7 +51,7 @@
 \large When Does Seasonal Decomposition Help?\\
 Pipeline decisions, measurement and analysis plan, implementation,\\ testing, pilot and full runs}
 \author{Prepared for D.\ Costa, the supervisor, and the partner university team}
-\date{Version 1.4 --- 29 September 2026 --- all decisions taken; awaiting supervisor sign-off}
+\date{Version 1.5 --- 1 October 2026 --- v1.4 approved by the supervisor; later amendments in Appendix~\ref{app:changelog}}
 
 \begin{document}
 \maketitle
@@ -1147,17 +1147,23 @@ D30 & Sign-off & Supervisor & Supervisor + partner; D.\ Costa alone. \\
 \section{Change log}\label{app:changelog}
 %=====================================================================
 
-\begin{tabularx}{\linewidth}{@{}l l X@{}}
+\begin{longtable}{@{}p{1.3cm} p{1.9cm} p{11.8cm}@{}}
 \toprule
 Version & Date & Change \\
 \midrule
+\endfirsthead
+\toprule
+Version & Date & Change \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
 1.0 & 28 Sep 2026 & First draft for approval. \\
 1.1 & 28 Sep 2026 & All open decisions taken in eight rounds of questions: D5 confirmed (option A); new decisions D25--D30 (ML inputs, practical threshold, aggregation, selector, release, sign-off); D2, D8, D11--D13, D15--D17, D20--D24 made explicit; Friedman + Nemenyi rankings (H7) and seed check (A15) added; gates G13 and tests U18--U19 added; timeline moved to start on the day of sign-off; Appendix~\ref{app:alternatives} added. \\
 1.2 & 28 Sep 2026 & D22 amended on instruction of D.\ Costa: the pipeline lives in the new folder \code{pipeline/} of the existing project repository (\code{github.com/DiogoCosta18/TimeSeriesForecasting}), branch \code{rerun-v2}, instead of a new dedicated repository. Consequence: sharing the code with the partner university means sharing the repository, paper workspace included. Sections 1.2, 4.6, 6.1, the timeline and Appendix~\ref{app:alternatives} updated accordingly. \\
 1.3 & 29 Sep 2026 & D2 amended on instruction of D.\ Costa after the M3 comparison: M3 from Mcomp~2.7 (CRAN) with official ids, the Monash copy kept as a bit-for-bit cross-check; rdata 0.11.2 and xarray 2026.7.0 added to the lock (no other pin changed); Appendix~\ref{app:alternatives} extended. Recorded while implementing D2: defects F4 (silent synthetic-data fallback in the loader; shown to be latent), m6 (M4 time stamps) and m7 (M3 values of the earlier runs) added to Appendix~\ref{app:defects} and to the traceability table; Section~\ref{sec:data} describes the frozen copy as implemented (sources, validation, file layout, manifest, order-only calendar); U18 extended; the rule for inherited tests and the four failing baseline tests stated in Section~\ref{sec:testing}; module table updated. \\
 1.4 & 29 Sep 2026 & Correction of 1.3. The statement that the Monash file carries a sign error was wrong: the original competition file \code{M3C.xls} (IIF), obtained the same day, has $-1200$ at N2786, $t=84$, and Monash reproduces it exactly; Mcomp~2.7 is the copy that differs ($+1200$, undocumented). D2 decided again by D.\ Costa: M3 from \code{M3C.xls} (pinned SHA-256), with Monash (identical) and Mcomp (one documented difference) as cross-checks that stop the freeze on any other difference. Section~\ref{sec:data}, the decision register, defect m7, the environment paragraph, the module table and Appendix~\ref{app:alternatives} corrected accordingly. \\
- & & \\
-\bottomrule
-\end{tabularx}
+1.5 & 1 Oct 2026 & \textbf{Sign-off:} v1.4 approved by the supervisor (reported by D.\ Costa on 1~October 2026); the approved text is the commit tagged \code{protocol-v1.4-approved}. From this version on, the body keeps the approved text and amendments are listed here only. \textbf{Amendments:} (a)~D20: the cloud bucket is a private Backblaze B2 bucket, accessed with rclone (decision of D.\ Costa, 1~October); credentials are created by D.\ Costa and never stored in the repository. (b)~Section~6.3: the frozen data copy is created and checked with \code{python -m src.data.freeze_data freeze -{}-out DIR -{}-code-commit SHA -{}-m3c M3C.xls} and \code{... verify -{}-data-dir DIR} (already done: copy \code{m3m4-v1}), then uploaded to the bucket with rclone; the \code{freeze-data} line of the listing becomes a \code{src.cli} subcommand with the same arguments when the stages are split (day~4). (c)~Section~\ref{sec:env}: the lock also pins sympy 1.13.1, the version torch 2.5.1 requires (the 21 May freeze had 1.14.0, which came with a later torch); \code{pipeline/environment/README.md} gives the derivation. Appendix~\ref{app:changelog} is typeset as a table that can break across pages. \\
+\end{longtable}
 
 \end{document}
