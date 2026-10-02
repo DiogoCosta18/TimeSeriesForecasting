@@ -295,7 +295,13 @@ def run_experiment(cfg_raw: dict, args: CliArgs) -> Path:
                 )
             )
         all_selected_ids = set(_concat(sample_parts).query("frequency == @freq")["unique_id"]) if sample_parts else set()
-        cutoffs = make_cutoffs(data[data["unique_id"].isin(all_selected_ids)], int(fcfg["horizon"]), int(fcfg["n_windows"]), int(fcfg["step_size"]))
+        cutoffs = make_cutoffs(
+            data[data["unique_id"].isin(all_selected_ids)],
+            int(fcfg["horizon"]),
+            int(fcfg["n_windows"]),
+            int(fcfg["step_size"]),
+            min_history=3 * int(fcfg["season_length"]) + int(fcfg["horizon"]),
+        )
         cutoffs["frequency"] = freq
         cutoff_parts.append(cutoffs)
 
