@@ -37,11 +37,6 @@ feature_compute:
   n_jobs: auto
   checkpoint_every_series: 100
   progress_log_every_series: 25
-  timeout_seconds_per_series:
-    smoke: 30
-    pilot: 60
-    full: 120
-    large: 120
   max_candidate_series_per_source:
     smoke: 50
     pilot: 300

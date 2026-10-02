@@ -81,17 +81,7 @@ def write_dataframe(path: Path, df: pd.DataFrame) -> None:
     suffix = path.suffix.lower()
     tmp = path.with_name(f".{path.name}.tmp")
     if suffix == ".parquet":
-        try:
-            df.to_parquet(tmp, index=False)
-        except Exception:
-            csv_fallback = path.with_suffix(".csv")
-            tmp_csv = csv_fallback.with_name(f".{csv_fallback.name}.tmp")
-            df.to_csv(tmp_csv, index=False)
-            os.replace(tmp_csv, csv_fallback)
-            tmp_text = path.with_name(f".{path.name}.tmp")
-            df.to_csv(tmp_text, index=False)
-            os.replace(tmp_text, path)
-            return
+        df.to_parquet(tmp, index=False)  # a failure is an error, never a CSV under a .parquet name
     elif suffix == ".csv":
         df.to_csv(tmp, index=False)
     else:
