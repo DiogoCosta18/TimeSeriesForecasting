@@ -52,7 +52,7 @@ def feature_sample(
         raise ValueError("n_per_source must be a multiple of n_strata")
     quota = n_per_source // n_strata
     parts = []
-    for source, pool in eligible.groupby("source_dataset", sort=True):
+    for source, pool in eligible[["unique_id", "source_dataset", feature]].groupby("source_dataset", sort=True):
         values = pool[feature].astype(float)
         if not np.isfinite(values).all():
             raise ValueError(f"{feature} {source}: non-finite values in the eligible pool")

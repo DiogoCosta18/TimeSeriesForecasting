@@ -1,0 +1,30 @@
+# Rerun protocol (approved v1.4; amendments in its change log): the decisions the code
+# reads. Each value names its decision; tests/test_rerun_config.py checks them against
+# the protocol. Sections for tuning and evaluation are added with those stages.
+
+random_seed: 20260521        # s0 of Section 3.4 (same base seed as the earlier runs)
+
+frequencies:                 # D2
+  monthly:
+    season_length: 12
+    horizon: 18
+    m3_group: Monthly
+    m4_group: Monthly
+  quarterly:
+    season_length: 4
+    horizon: 8
+    m3_group: Quarterly
+    m4_group: Quarterly
+
+validation:
+  n_windows: 3               # D8: rolling origin, step = h
+
+sampling:                    # D6
+  n_per_source: 600
+  n_strata: 30
+
+buckets:
+  min_share: 0.20            # D7: degenerate if any bucket < 20%
+
+tuning_set:
+  n_per_source: 600          # D13
