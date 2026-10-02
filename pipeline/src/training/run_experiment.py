@@ -125,13 +125,11 @@ def _feature_compute_settings(cfg: dict, budget: str) -> dict:
         n_jobs = default_feature_compute_workers()
     else:
         n_jobs = max(1, int(raw_jobs))
-    timeout_cfg = fc.get("timeout_seconds_per_series", {}) or {}
     max_candidate_cfg = fc.get("max_candidate_series_per_source", {}) or {}
     return {
         "n_jobs": n_jobs,
         "checkpoint_every_series": int(fc.get("checkpoint_every_series", 100)),
         "progress_log_every_series": int(fc.get("progress_log_every_series", 25)),
-        "timeout_seconds_per_series": int(timeout_cfg.get(budget, 120 if budget in {"full", "large"} else 60)),
         "max_candidate_series_per_source": max_candidate_cfg.get(budget),
     }
 
@@ -257,7 +255,7 @@ def run_experiment(cfg_raw: dict, args: CliArgs) -> Path:
             data,
             int(fcfg["season_length"]),
             int(fcfg["horizon"]),
-            trim_final_horizon=True,
+            n_windows=int(fcfg["n_windows"]),
             n_jobs=feature_compute["n_jobs"],
             cache_dir=run_root / "features" / "cache",
             frequency=freq,
@@ -265,7 +263,6 @@ def run_experiment(cfg_raw: dict, args: CliArgs) -> Path:
             status_callback=feature_status_callback,
             checkpoint_every_series=feature_compute["checkpoint_every_series"],
             progress_log_every_series=feature_compute["progress_log_every_series"],
-            timeout_seconds_per_series=feature_compute["timeout_seconds_per_series"],
         )
         raw_features["frequency"] = freq
         flags["frequency"] = freq

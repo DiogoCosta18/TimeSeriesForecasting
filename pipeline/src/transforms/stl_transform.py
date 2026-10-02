@@ -4,6 +4,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from src.features.errors import DecompositionError
 from src.features.mstl_features import decompose_series
 
 
@@ -37,10 +38,9 @@ class STLTransform:
         if not self.fitted_:
             raise RuntimeError("STLTransform must be fitted before forecasting")
         seasonal = np.asarray(self.seasonal_, dtype=float)
-        if len(seasonal) == 0:
-            return np.zeros(h)
-        out = []
-        for i in range(h):
-            out.append(seasonal[-self.season_length + (i % self.season_length)] if len(seasonal) >= self.season_length else seasonal[-1])
-        return np.asarray(out)
+        if len(seasonal) < self.season_length:
+            # Unreachable after a successful fit (STL needs two seasons); never substitute values.
+            raise DecompositionError("stl_too_short")
+        last_cycle = seasonal[-self.season_length:]
+        return np.asarray([last_cycle[i % self.season_length] for i in range(h)])
 
