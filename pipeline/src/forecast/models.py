@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import logging
 import os
+import time
 import warnings
 from importlib import metadata
 
@@ -59,14 +60,24 @@ def statistical_model(model: str, season_length: int):
     raise KeyError(f"{model} is not a statistical model")
 
 
-def forecast_statistical(model: str, y_train, h: int, season_length: int) -> ForecastResult:
-    """One series. Arguments as in the valid May run (regression test I2); raises on failure."""
+def forecast_statistical(model: str, y_train, h: int, season_length: int, timings: dict | None = None) -> ForecastResult:
+    """One series. Arguments as in the valid May run (regression test I2); raises on failure.
+
+    fit + predict gives the same forecasts as the earlier runs' ``forecast`` (tested) and
+    lets the two times be recorded separately in ``timings``.
+    """
     from statsforecast import StatsForecast
 
     y = np.asarray(y_train, dtype=float)
     df = pd.DataFrame({"unique_id": ["s"] * len(y), "ds": range(len(y)), "y": y})
     sf = StatsForecast(models=[statistical_model(model, season_length)], freq=1, n_jobs=1)
-    fcst = sf.forecast(df=df, h=h)
+    clock = {} if timings is None else timings
+    start = time.perf_counter()
+    sf.fit(df=df)
+    clock["fit_seconds"] = time.perf_counter() - start
+    start = time.perf_counter()
+    fcst = sf.predict(h=h)
+    clock["predict_seconds"] = time.perf_counter() - start
     col = [c for c in fcst.columns if c not in {"unique_id", "ds"}]
     if len(col) != 1:
         raise ForecastError(f"unexpected statsforecast output columns {list(fcst.columns)}")
@@ -92,12 +103,17 @@ def _per_series(preds: pd.DataFrame, column: str, ids: list[str], h: int, model:
 
 
 def fit_predict_global(model: str, params: dict, train: pd.DataFrame, h: int, season_length: int, seed: int,
-                       *, trained_steps: int | None = None, config_key: str | None = None) -> dict[str, ForecastResult]:
-    """Fit one global model on ``train`` (unique_id, ds = position t, y) and forecast h steps per series."""
+                       *, trained_steps: int | None = None, config_key: str | None = None,
+                       timings: dict | None = None) -> dict[str, ForecastResult]:
+    """Fit one global model on ``train`` (unique_id, ds = position t, y) and forecast h steps per series.
+
+    ``timings``, when given, receives fit_seconds and predict_seconds.
+    """
     fam = family(model)
     ids = sorted(train["unique_id"].unique())
     df = train[["unique_id", "ds", "y"]].sort_values(["unique_id", "ds"], kind="mergesort").reset_index(drop=True)
     version = backend_version(model)
+    clock = {} if timings is None else timings
     if fam == "ml":
         from mlforecast import MLForecast
 
@@ -108,8 +124,12 @@ def fit_predict_global(model: str, params: dict, train: pd.DataFrame, h: int, se
                 lags=spaces.ml_lags(season_length),
                 target_transforms=spaces.ml_target_transforms(params, season_length),
             )
+            start = time.perf_counter()
             mlf.fit(df, static_features=[])
+            clock["fit_seconds"] = time.perf_counter() - start
+            start = time.perf_counter()
             preds = mlf.predict(h)
+            clock["predict_seconds"] = time.perf_counter() - start
         return _per_series(preds, model, ids, h, model, config_key, seed, version, "cpu")
     if fam in ("neural", "transformer"):
         from neuralforecast import NeuralForecast
@@ -119,7 +139,11 @@ def fit_predict_global(model: str, params: dict, train: pd.DataFrame, h: int, se
         device = accelerator()
         kwargs = spaces.neural_kwargs(model, params, h, seed, max_steps=trained_steps, accelerator=device)
         nf = NeuralForecast(models=[spaces.neural_class(model)(**kwargs)], freq=1)
+        start = time.perf_counter()
         nf.fit(df, val_size=0)
+        clock["fit_seconds"] = time.perf_counter() - start
+        start = time.perf_counter()
         preds = nf.predict()
+        clock["predict_seconds"] = time.perf_counter() - start
         return _per_series(preds, model, ids, h, model, config_key, seed, version, device)
     raise KeyError(f"{model} is not a global model")
