@@ -28,3 +28,9 @@ buckets:
 
 tuning_set:
   n_per_source: 600          # D13
+
+tuning:                      # D12, Section 4.3: Optuna TPE, objective mean validation MASE
+  num_samples: 20            # trials per study (15 for the slowest family only if the pilot projects an overrun)
+  early_stopping:            # tuning only; the protocol does not fix these two values:
+    patience: 5              #   validation checks without improvement before stopping
+    check_steps: 50          #   training steps between validation checks
