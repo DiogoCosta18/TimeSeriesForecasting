@@ -21,4 +21,6 @@ def test_config_matches_the_protocol():
     assert cfg["sampling"] == {"n_per_source": 600, "n_strata": 30}          # D6
     assert cfg["buckets"] == {"min_share": 0.20} and MIN_BUCKET_SHARE == 0.20  # D7
     assert cfg["tuning_set"] == {"n_per_source": 600}                        # D13
+    assert cfg["tuning"]["num_samples"] == 20                                # D12
+    assert set(cfg["tuning"]["early_stopping"]) == {"patience", "check_steps"}  # tuning only (Section 4.3)
     assert [eligibility_length(f["season_length"], f["horizon"]) for f in cfg["frequencies"].values()] == [54, 20]  # D3
