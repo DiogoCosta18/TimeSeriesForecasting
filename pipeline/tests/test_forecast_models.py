@@ -9,7 +9,7 @@ import optuna
 import pandas as pd
 import pytest
 
-from src.forecast import models, registry, result, spaces
+from src.forecast import metrics, models, registry, result, spaces, targets, tuning
 from src.forecast.registry import FAMILY, GLOBAL_MODELS, MODELS, STATISTICAL_MODELS
 from src.forecast.result import TRAINED_SOURCES, ForecastError, ForecastResult
 
@@ -57,15 +57,20 @@ def test_u9_result_object_rejects_wrong_length_or_non_finite_values():
     assert TRAINED_SOURCES == {registry.SOURCE[f] for f in registry.FAMILIES}
 
 
-@pytest.mark.parametrize("module", [models, spaces, result, registry])
+@pytest.mark.parametrize("module", [models, spaces, result, registry, tuning, targets, metrics])
 def test_u9_model_layer_has_no_recovery_or_stub_paths(module):
     source = inspect.getsource(module)
     tree = ast.parse(source)
     assert not [n for n in ast.walk(tree) if isinstance(n, ast.Try)]
     imported = {n.module for n in ast.walk(tree) if isinstance(n, ast.ImportFrom) and n.module}
     assert not {m for m in imported if m.startswith(("src.models", "src.training"))}
+    for node in ast.walk(tree):  # drop docstrings: words may be named there to say they are absent
+        body = getattr(node, "body", None)
+        if isinstance(body, list) and body and isinstance(body[0], ast.Expr) and isinstance(getattr(body[0], "value", None), ast.Constant):
+            body.pop(0)
+    code = ast.unparse(tree)  # code only: comments are gone too
     for word in ("fallback", "baseline", "seasonal_naive", "identity_scale", "jitter", "_safe_"):
-        assert word not in source
+        assert word not in code
 
 
 def test_registry_holds_the_twelve_models_of_the_protocol():
@@ -132,6 +137,21 @@ def test_u10_statistical_forecasts_are_reproducible(model):
     a = models.forecast_statistical(model, y, 18, 12)
     b = models.forecast_statistical(model, y, 18, 12)
     assert a.forecast_hash == b.forecast_hash and a.source == "trained_statsforecast" and len(a.yhat) == 18
+
+
+@pytest.mark.parametrize("model", STATISTICAL_MODELS)
+@pytest.mark.parametrize("m, h", [(12, 18), (4, 8)])
+def test_statistical_fit_predict_equals_the_earlier_runs_forecast_call(model, m, h):
+    """Regression test I2 needs the May run's numbers: fit + predict must equal forecast() exactly."""
+    from statsforecast import StatsForecast
+
+    data = pool(8, (3 * m + h, 3 * m + h + 60), m, seed=m)
+    for _, g in data.groupby("unique_id"):
+        y = g["y"].to_numpy()
+        df = pd.DataFrame({"unique_id": ["s"] * len(y), "ds": range(len(y)), "y": y})
+        reference = StatsForecast(models=[models.statistical_model(model, m)], freq=1, n_jobs=1).forecast(df=df, h=h)
+        ours = models.forecast_statistical(model, y, h, m)
+        np.testing.assert_array_equal(ours.yhat, reference.iloc[:, -1].to_numpy(dtype=float))
 
 
 def test_statistical_failure_raises_instead_of_substituting():
