@@ -141,14 +141,22 @@ def tune_neural(model: str, frame: pd.DataFrame, h: int, season_length: int, fit
 
 
 def archive_study(study: optuna.Study, storage_path: Path, study_name: str) -> None:
-    """Copy every trial into SQLite with JSON-safe attributes (params, distributions, value)."""
+    """Copy every trial into SQLite: parameters, distributions, validation MASE, start and end
+    times and duration (Section 5.1); the libraries' own attributes are not JSON-safe and are
+    left out."""
     bad = [t.number for t in study.trials if t.state != optuna.trial.TrialState.COMPLETE]
     if bad:
         raise TuningError(f"{study_name}: trials {bad} did not complete")
     storage = f"sqlite:///{Path(storage_path).resolve()}"
     archive = optuna.create_study(storage=storage, study_name=study_name, direction="minimize")
     archive.add_trials([
-        optuna.trial.create_trial(params=t.params, distributions=t.distributions, value=t.value)
+        optuna.trial.FrozenTrial(
+            number=t.number, state=t.state, value=t.value, values=None,
+            datetime_start=t.datetime_start, datetime_complete=t.datetime_complete,
+            params=t.params, distributions=t.distributions,
+            user_attrs={"duration_seconds": (t.datetime_complete - t.datetime_start).total_seconds()},
+            system_attrs={}, intermediate_values={}, trial_id=t._trial_id,
+        )
         for t in study.trials
     ])
 

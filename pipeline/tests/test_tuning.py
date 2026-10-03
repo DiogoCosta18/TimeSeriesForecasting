@@ -95,6 +95,24 @@ def test_ml_study_freezes_the_sampled_parameters_and_is_reproducible(tmp_path):
     assert len(forecasts) == 12
 
 
+def test_archive_keeps_every_trial_with_its_value_and_duration(tmp_path):
+    import time
+
+    study = optuna.create_study(direction="minimize", sampler=optuna.samplers.RandomSampler(seed=0))
+
+    def objective(trial):
+        time.sleep(0.05)
+        return trial.suggest_float("x", 0.0, 1.0)
+
+    study.optimize(objective, n_trials=3)
+    tuning.archive_study(study, tmp_path / "s.sqlite", "probe")
+    stored = optuna.load_study(study_name="probe", storage=f"sqlite:///{tmp_path / 's.sqlite'}")
+    for original, copy in zip(study.trials, stored.trials):
+        assert copy.params == original.params and copy.value == original.value
+        assert copy.datetime_start == original.datetime_start and copy.datetime_complete == original.datetime_complete
+        assert copy.user_attrs["duration_seconds"] >= 0.05
+
+
 def test_neural_study_freezes_parameters_and_trained_steps(tmp_path):
     m, h = 4, 8
     data = canonical(10, m, seed=4)
