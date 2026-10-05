@@ -63,16 +63,33 @@ The fix must descend from the frozen commit, and the environment, data, bundle a
 must be unchanged. The rerun is entered in `evaluate/<shard>/d16_reruns.json`, the only way the
 merge accepts a second commit (G4), and the protocol's change log records it.
 
+## Machines and the bucket (D20)
+
+Outputs and logs go to the private bucket while stages run. `RERUN_BUCKET` is set on each
+machine; credentials live only in the machine's rclone configuration (remote `b2rerun`).
+
+```bash
+scripts/sync_run.sh RUN &                                  # upload every 5 min; never deletes in the bucket
+scripts/run_stage.sh RUN evaluate-ml-monthly evaluate --config ... --run RUN --data-dir DATA --shard ml-monthly
+touch RUN/.sync_stop                                       # last upload, then rclone check; wait for it
+scripts/fetch_run.sh RUN_NAME RUN prepare configs_frozen.json   # what another machine needs
+```
+
+`run_stage.sh` keeps each stage's log in `RUN/logs/`. A machine lost mid-shard is replaced by
+fetching the run and starting the same shard again: finished tasks are skipped.
+
 ## Pilot
 
-The pilot (protocol Section 8) uses the same code with a configuration that adds
-`features: [feature_evolving_seasonality, feature_nonlinearity]`, empty `seed_check_seeds`, and
-its own sample, tuning-set and trial counts. Pilot results are never reported.
+The pilot (protocol Section 8) runs the same code with `configs/pilot_v2.yaml`: two features
+(evolving seasonality and nonlinearity), 100 series per source per feature in 25 strata, a tuning
+set of 100 per source, 3 trials per study, main seed only. A test checks that nothing else differs
+from `configs/rerun_v2.yaml`. Pilot results are never reported.
 
 ## Tests
 
 ```bash
-python -m pytest tests -p no:cacheprovider
+python -m pytest tests -p no:cacheprovider                    # unit and stage tests (minutes)
+python -m pytest tests -p no:cacheprovider -m integration     # I1 full chain and I4 resume, real fits on CPU
 ```
 
 The stage tests build a small synthetic frozen copy. Some replace the model fits with cheap

@@ -25,3 +25,22 @@ def test_config_matches_the_protocol():
     assert cfg["tuning"]["num_samples"] == 20                                # D12
     assert set(cfg["tuning"]["early_stopping"]) == {"patience", "check_steps"}  # tuning only (Section 4.3)
     assert [eligibility_length(f["season_length"], f["horizon"]) for f in cfg["frequencies"].values()] == [54, 20]  # D3
+
+
+def test_pilot_config_differs_from_the_full_run_only_where_section_8_1_says():
+    full = read_yaml(CONFIG)
+    pilot = read_yaml(CONFIG.with_name("pilot_v2.yaml"))
+    changed = {("seed_check_seeds",), ("features",), ("sampling", "n_per_source"), ("sampling", "n_strata"),
+               ("tuning_set", "n_per_source"), ("tuning", "num_samples")}
+
+    def flat(d, prefix=()):
+        out = {}
+        for k, v in d.items():
+            out.update(flat(v, prefix + (k,)) if isinstance(v, dict) else {prefix + (k,): v})
+        return out
+
+    f, p = flat(full), flat(pilot)
+    assert {k for k in f.keys() | p.keys() if f.get(k) != p.get(k)} == changed
+    assert pilot["seed_check_seeds"] == [] and pilot["features"] == ["feature_evolving_seasonality", "feature_nonlinearity"]
+    assert (pilot["sampling"]["n_per_source"], pilot["tuning_set"]["n_per_source"], pilot["tuning"]["num_samples"]) == (100, 100, 3)
+    assert pilot["sampling"]["n_per_source"] % pilot["sampling"]["n_strata"] == 0

@@ -1,0 +1,40 @@
+# Pilot of the rerun protocol (Section 8.1). Identical to configs/rerun_v2.yaml except the
+# keys marked PILOT; tests/test_rerun_config.py checks that nothing else differs. Pilot
+# results are never reported.
+
+random_seed: 20260521        # s0 of Section 3.4 (same base seed as the earlier runs); the seed of every fit (D17)
+seed_check_seeds: []         # PILOT: main seed only
+features:                    # PILOT: two features (evolving seasonality; nonlinearity exercises the D7 guard)
+  - feature_evolving_seasonality
+  - feature_nonlinearity
+
+frequencies:                 # D2
+  monthly:
+    season_length: 12
+    horizon: 18
+    m3_group: Monthly
+    m4_group: Monthly
+  quarterly:
+    season_length: 4
+    horizon: 8
+    m3_group: Quarterly
+    m4_group: Quarterly
+
+validation:
+  n_windows: 3               # D8: rolling origin, step = h
+
+sampling:                    # D6
+  n_per_source: 100          # PILOT: 100 per source per feature
+  n_strata: 25               # PILOT: 100 cannot fill 30 equal strata; 25 strata of 4 (the closest divisor of 100)
+
+buckets:
+  min_share: 0.20            # D7: degenerate if any bucket < 20%
+
+tuning_set:
+  n_per_source: 100          # PILOT: tuning set of 100 per source
+
+tuning:                      # D12, Section 4.3: Optuna TPE, objective mean validation MASE
+  num_samples: 3             # PILOT: 3 trials per study
+  early_stopping:            # tuning only; the protocol does not fix these two values:
+    patience: 5              #   validation checks without improvement before stopping
+    check_steps: 50          #   training steps between validation checks
