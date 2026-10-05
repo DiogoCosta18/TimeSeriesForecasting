@@ -79,3 +79,28 @@ def test_training_pools_are_the_sample_or_one_of_its_buckets():
     low = tg.Task("global", "monthly", "NHITS", "direct", None, "feature_arch_stat", "low", S0, 1)
     low_members, low_buckets = tg.global_task_members(low, samples, buckets)
     assert len(low_members) == 4 and set(low_buckets.values()) == {"Low"} and set(low_members) <= set(members)
+
+
+def test_pilot_feature_subset_gives_its_grid_and_needs_the_seed_check_feature():
+    """Section 8.1: two features, main seed only; the grid follows the bundle's features."""
+    pilot = ["feature_nonlinearity", "feature_evolving_seasonality"]
+    samples, _ = samples_and_buckets()
+    table = summary(True)
+    table = table[table["feature_name"].isin(pilot)]
+    tasks = tg.evaluation_tasks(table, samples[samples["feature_name"].isin(pilot)], S0, [])
+    counts = tg.grid_counts(tasks)
+    assert counts == {"cohort_global": 2 * 2 * 3 * 9, "cohort_statistical_views": 2 * 2 * 3 * 3,
+                      "tercile": 2 * 3 * 9 * (3 + 2), "seed_check": 0, "statistical_chunks": 2 * 3 * 3}
+    with pytest.raises(ValueError, match="seed check needs"):
+        tg.evaluation_tasks(table[table["feature_name"] == "feature_nonlinearity"], samples, S0, EXTRA)
+
+
+def test_selected_features_validates_and_keeps_canonical_order():
+    from src.data.schemas import selected_features
+
+    assert selected_features({}) == FEATURE_NAMES
+    assert selected_features({"features": ["feature_arch_stat", "feature_non_normality"]}) == ["feature_non_normality",
+                                                                                               "feature_arch_stat"]
+    for bad in ([], ["feature_arch_stat", "feature_arch_stat"], ["feature_unknown"]):
+        with pytest.raises(ValueError):
+            selected_features({"features": bad})

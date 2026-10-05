@@ -79,3 +79,16 @@ def test_a_bundle_is_never_overwritten_or_resumed_with_other_inputs(frozen_copy,
     (tmp_path / "prepare" / "prepare_state.json").write_text(json.dumps({"code_commit": "b" * 40}), encoding="utf-8")
     with pytest.raises(PrepareError, match="other inputs"):
         run_prepare(CONFIG, tmp_path, data_dir, COMMIT, manifest_path=manifest_path)
+
+
+def test_a_feature_subset_samples_only_those_features_with_the_full_runs_seeds(frozen_copy, prepared, tmp_path):
+    """The pilot's subset (Section 8.1): same eligibility; each feature drawn as in the full run."""
+    data_dir, manifest_path = frozen_copy
+    _, _, full = prepared
+    subset = {**CONFIG, "features": ["feature_evolving_seasonality", "feature_nonlinearity"]}
+    bundle = run_prepare(subset, tmp_path, data_dir, COMMIT, manifest_path=manifest_path)
+    samples = pd.read_parquet(tmp_path / "prepare" / "samples.parquet")
+    assert set(samples["feature_name"]) == set(subset["features"]) and len(bundle["bucket_summary"]) == 4
+    expected = full["samples"][full["samples"]["feature_name"].isin(subset["features"])].reset_index(drop=True)
+    pd.testing.assert_frame_equal(samples, expected)
+    pd.testing.assert_frame_equal(pd.read_parquet(tmp_path / "prepare" / "eligibility.parquet"), full["eligibility"])

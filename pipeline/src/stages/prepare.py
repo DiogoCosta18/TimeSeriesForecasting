@@ -32,7 +32,7 @@ from src.data.eligibility import eligibility_length, eligibility_table, length_t
 from src.data.frozen import DEFAULT_MANIFEST, load_manifest, sha256_file
 from src.data.load_m_datasets import frozen_data_provenance, load_dataset_pair
 from src.data.sample_series import feature_sample, tercile_buckets, tuning_set
-from src.data.schemas import FEATURE_NAMES
+from src.data.schemas import FEATURE_NAMES, selected_features
 from src.data.validation import make_cutoffs
 from src.features.compute_all import QUALITY_FLAG_NAMES, compute_feature_table
 from src.utils import atomic_write_json, read_yaml
@@ -88,7 +88,7 @@ def _prepare_frequency(frequency, fcfg, config, data_dir, manifest, cache_dir, n
     eligible = features[features["eligible"]]
 
     samples, buckets, summaries = [], [], []
-    for feature in FEATURE_NAMES:
+    for feature in selected_features(config):
         sample = feature_sample(eligible, feature, frequency, m, s0,
                                 int(config["sampling"]["n_per_source"]), int(config["sampling"]["n_strata"]))
         assigned, summary = tercile_buckets(sample, float(config["buckets"]["min_share"]))
