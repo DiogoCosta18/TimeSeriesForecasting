@@ -95,6 +95,25 @@ def test_ml_study_freezes_the_sampled_parameters_and_is_reproducible(tmp_path):
     assert len(forecasts) == 12
 
 
+def test_ml_study_with_the_full_run_trial_count_completes_every_trial(tmp_path):
+    """With more than 5 trials Optuna's default median pruner would end trials after their only
+    window, leaving them without a value; every trial must be evaluated and archived (Section 5.1)."""
+    from pathlib import Path
+
+    from src.utils import read_yaml
+
+    settings = read_yaml(Path(__file__).resolve().parents[1] / "configs" / "rerun_v2.yaml")["tuning"]
+    assert settings["num_samples"] > 5
+    m, h = 4, 8
+    data = canonical(12, m, seed=3)
+    frame = tuning.tuning_frame(data, tuning_rows(data, h, "quarterly"), "quarterly", "raw", m)
+    entry = tuning.tune_study("Ridge", "quarterly", "raw", frame, h, m, settings, SEED, tmp_path / "r.sqlite")
+    stored = optuna.load_study(study_name="Ridge__quarterly__raw", storage=f"sqlite:///{tmp_path / 'r.sqlite'}")
+    assert len(stored.trials) == settings["num_samples"]
+    assert all(t.state == optuna.trial.TrialState.COMPLETE and np.isfinite(t.value) for t in stored.trials)
+    assert min(t.value for t in stored.trials) == entry["best_validation_mase"]
+
+
 def test_archive_keeps_every_trial_with_its_value_and_duration(tmp_path):
     import time
 
