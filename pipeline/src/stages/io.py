@@ -50,6 +50,11 @@ def code_commit(repo: Path = REPO_ROOT) -> str:
     return commit
 
 
+def is_ancestor(old: str, new: str, repo: Path = REPO_ROOT) -> bool:
+    """Whether commit ``old`` is an ancestor of (or equal to) commit ``new``."""
+    return subprocess.run(["git", "-C", str(repo), "merge-base", "--is-ancestor", old, new], capture_output=True).returncode == 0
+
+
 def environment_lock_sha256() -> str:
     return sha256_file(LOCKFILE)
 
@@ -148,14 +153,23 @@ class TaskStore:
         write_json(self.record_path(task_id), {"task_id": task_id, "sha256": sha256, "file": self.output(task_id, suffix).name,
                                                "provenance": self.provenance, "completed_at_utc": utc_now(), **(extra or {})})
 
+    def failure_path(self, task_id: str) -> Path:
+        return self.root / "failures" / f"{safe_name(task_id)}.json"
+
+    def failure(self, task_id: str) -> dict | None:
+        path = self.failure_path(task_id)
+        return read_json(path) if path.exists() else None
+
     def record_failure(self, task_id: str, attempts: list[str]) -> None:
-        write_json(self.root / "failures" / f"{safe_name(task_id)}.json",
-                   {"task_id": task_id, "attempts": attempts, "provenance": self.provenance, "failed_at_utc": utc_now()})
+        """List a failure; an earlier listing of the same task is kept in ``history``."""
+        previous = self.failure(task_id)
+        history = [] if previous is None else previous["history"] + [{k: previous[k] for k in ("attempts", "provenance", "failed_at_utc")}]
+        write_json(self.failure_path(task_id), {"task_id": task_id, "attempts": attempts, "provenance": self.provenance,
+                                                "failed_at_utc": utc_now(), "history": history})
 
     def clear_failure(self, task_id: str) -> None:
-        path = self.root / "failures" / f"{safe_name(task_id)}.json"
-        if path.exists():
-            path.unlink()
+        if self.failure_path(task_id).exists():
+            self.failure_path(task_id).unlink()
 
 
 class Heartbeat:
