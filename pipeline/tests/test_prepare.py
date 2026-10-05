@@ -3,54 +3,16 @@ from __future__ import annotations
 
 import json
 
-import numpy as np
 import pandas as pd
 import pytest
 
-from helpers_frozen import write_frozen
-from src.data.frozen import COLUMNS, sha256_file
+from helpers_run import COMMIT, CONFIG, synthetic_frozen_copy
+from src.data.frozen import sha256_file
 from src.stages.prepare import PrepareError, run_prepare
-
-COMMIT = "a" * 40
-CONFIG = {
-    "random_seed": 7,
-    "frequencies": {
-        "monthly": {"season_length": 12, "horizon": 18, "m3_group": "Monthly", "m4_group": "Monthly"},
-        "quarterly": {"season_length": 4, "horizon": 8, "m3_group": "Quarterly", "m4_group": "Quarterly"},
-    },
-    "validation": {"n_windows": 3},
-    "sampling": {"n_per_source": 6, "n_strata": 3},
-    "buckets": {"min_share": 0.2},
-    "tuning_set": {"n_per_source": 6},
-}
-SPEC = {"Monthly": (12, 120, 100), "Quarterly": (4, 50, 40)}  # m, regular length, short length
-
-
-def _canonical(key: str, seed: int) -> pd.DataFrame:
-    group = key.split("_")[1]
-    m, n, n_short = SPEC[group]
-    rng = np.random.default_rng(seed)
-    series = {}
-    for i in range(8):
-        t = np.arange(n)
-        series[f"R{i}"] = 100 + 0.2 * t + 6 * np.sin(2 * np.pi * t / m + i) + rng.normal(0, 1.5 + i / 4, n)
-    series["SHORT"] = 100 + rng.normal(0, 2, n_short)       # history below L
-    flat = 100 + rng.normal(0, 2, n)
-    flat[: n - 3 * {12: 18, 4: 8}[m]] = 50.0                  # constant history: features undefined
-    series["FLAT"] = flat
-    rows = [
-        {"unique_id": f"{key}_{sid}", "source_dataset": key, "frequency": group.lower(), "t": t, "y": float(v), "ds_source": str(t)}
-        for sid, values in series.items() for t, v in enumerate(values, start=1)
-    ]
-    return pd.DataFrame(rows)[COLUMNS].astype({"t": "int64", "y": "float64"})
-
 
 @pytest.fixture(scope="module")
 def frozen_copy(tmp_path_factory):
-    root = tmp_path_factory.mktemp("data")
-    frames = {key: _canonical(key, i) for i, key in enumerate(["M3_Monthly", "M4_Monthly", "M3_Quarterly", "M4_Quarterly"])}
-    _, manifest_path = write_frozen(root, frames)
-    return root, manifest_path
+    return synthetic_frozen_copy(tmp_path_factory.mktemp("data"))
 
 
 @pytest.fixture(scope="module")
