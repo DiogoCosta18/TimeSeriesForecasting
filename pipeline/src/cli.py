@@ -1,7 +1,7 @@
 """Command line of the rerun (protocol Section 6.3).
 
     python -m src.cli freeze-data ...                       # the frozen copy (src.data.freeze_data)
-    python -m src.cli prepare  --config C --run DIR --data-dir D [--jobs N]
+    python -m src.cli prepare  --config C --run DIR --data-dir D [--jobs N|auto]
     python -m src.cli tune     --config C --run DIR --data-dir D --shard FAMILY-FREQUENCY
     python -m src.cli freeze   --config C --run DIR        # configs_frozen.json + hash
     python -m src.cli evaluate --config C --run DIR --data-dir D --shard FAMILY-FREQUENCY [--only TASK_ID ...]
@@ -17,7 +17,6 @@ from __future__ import annotations
 import argparse
 import json
 import logging
-import os
 import sys
 from pathlib import Path
 

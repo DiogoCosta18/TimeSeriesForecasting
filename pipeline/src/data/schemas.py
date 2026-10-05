@@ -24,21 +24,3 @@ def selected_features(config: dict) -> list[str]:
         raise ValueError(f"features must be distinct names from {FEATURE_NAMES}: {chosen}")
     return [name for name in FEATURE_NAMES if name in chosen]
 
-
-FEATURE_ZSCORE_NAMES = [f"{name}_zscore" for name in FEATURE_NAMES]
-FEATURE_BIN_NAMES = [f"{name}_bin" for name in FEATURE_NAMES]
-
-MODEL_FAMILIES = {
-    "statistical": ["AutoARIMA", "AutoSARIMA", "AutoETS"],
-    "mlforecast": ["AutoRandomForest", "AutoLinearRegression", "AutoRidge", "AutoXGBoost"],
-    "neuralforecast": ["AutoNLinear", "AutoNHITS", "AutoLSTM"],
-    "transformers": ["AutoTFT", "AutoPatchTST"],
-}
-
-SMOKE_MODELS = {
-    "statistical": ["AutoETS"],
-    "mlforecast": ["AutoRidge"],
-    "neuralforecast": ["AutoNLinear"],
-    "transformers": ["AutoPatchTST"],
-}
-

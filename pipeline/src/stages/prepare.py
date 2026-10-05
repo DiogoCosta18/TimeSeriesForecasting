@@ -16,13 +16,10 @@ the code commit, not the creation time: the same inputs give the same hash.
 """
 from __future__ import annotations
 
-import argparse
 import hashlib
 import json
 import logging
-import os
 import re
-import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -35,7 +32,7 @@ from src.data.sample_series import feature_sample, tercile_buckets, tuning_set
 from src.data.schemas import FEATURE_NAMES, selected_features
 from src.data.validation import make_cutoffs
 from src.features.compute_all import QUALITY_FLAG_NAMES, compute_feature_table
-from src.utils import atomic_write_json, read_yaml
+from src.utils import atomic_write_json
 
 BUNDLE_FORMAT = "rerun-prepare-bundle/1"
 LOCKFILE = Path(__file__).resolve().parents[2] / "environment" / "requirements-lock-linux-cu121.txt"
@@ -189,21 +186,3 @@ def run_prepare(
     atomic_write_json(out / "bundle.json", bundle)
     return bundle
 
-
-def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="python -m src.stages.prepare")
-    parser.add_argument("--config", required=True, type=Path)
-    parser.add_argument("--run", required=True, type=Path)
-    parser.add_argument("--data-dir", required=True, type=Path)
-    parser.add_argument("--code-commit", required=True)
-    parser.add_argument("--jobs", default="1", help="feature workers, or 'auto' for all cores")
-    args = parser.parse_args(argv)
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
-    n_jobs = os.cpu_count() if args.jobs == "auto" else int(args.jobs)
-    bundle = run_prepare(read_yaml(args.config), args.run, args.data_dir, args.code_commit, n_jobs=n_jobs)
-    print(json.dumps({"bundle_sha256": bundle["bundle_sha256"], "counts": bundle["counts"]}, indent=2))
-    return 0
-
-
-if __name__ == "__main__":
-    sys.exit(main())
