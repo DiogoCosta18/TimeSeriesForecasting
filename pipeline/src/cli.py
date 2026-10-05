@@ -2,7 +2,7 @@
 
     python -m src.cli freeze-data ...                       # the frozen copy (src.data.freeze_data)
     python -m src.cli prepare  --config C --run DIR --data-dir D [--jobs N|auto]
-    python -m src.cli tune     --config C --run DIR --data-dir D --shard FAMILY-FREQUENCY
+    python -m src.cli tune     --config C --run DIR --data-dir D --shard FAMILY-FREQUENCY [--workers N]
     python -m src.cli freeze   --config C --run DIR        # configs_frozen.json + hash
     python -m src.cli evaluate --config C --run DIR --data-dir D --shard FAMILY-FREQUENCY [--only TASK_ID ...] [--workers N]
     python -m src.cli merge    --run DIR                   # refuses mismatched hashes
@@ -35,9 +35,9 @@ def main(argv: list[str] | None = None) -> int:
             p.add_argument("--data-dir", required=True, type=Path)
         if name in ("tune", "evaluate"):
             p.add_argument("--shard", required=True)
+            p.add_argument("--workers", type=int, default=1, help="processes computing tasks (CPU shards)")
         if name == "evaluate":
             p.add_argument("--only", nargs="*", default=None, help="rerun only these task ids (D16)")
-            p.add_argument("--workers", type=int, default=1, help="processes computing tasks (CPU shards)")
         if name == "prepare":
             p.add_argument("--jobs", default="1")
     for name in ("merge", "gates"):
@@ -70,7 +70,7 @@ def main(argv: list[str] | None = None) -> int:
     elif args.stage == "tune":
         from src.stages.tune import run_tune
 
-        print(run_tune(args.run, read_yaml(args.config), args.data_dir, args.shard, manifest))
+        print(run_tune(args.run, read_yaml(args.config), args.data_dir, args.shard, manifest, workers=args.workers))
     elif args.stage == "freeze":
         from src.stages.tune import run_freeze
 
