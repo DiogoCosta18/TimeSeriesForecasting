@@ -84,3 +84,111 @@ def test_run_stage_logs_into_the_run_and_keeps_the_exit_code(tmp_path):
     assert res.returncode != 0                                      # no merged bundle: the stage fails ...
     log = (run / "logs" / "gates.log").read_text(encoding="utf-8")
     assert "python -m src.cli gates --run" in log and "exit 1" in log  # ... and the log says so
+
+
+# --- run_machine.sh: several machines coordinated through the bucket ------------------------------
+
+FAKE_CLI = '''
+import os, sys, time
+from pathlib import Path
+
+args = sys.argv[3:]                      # python -m src.cli STAGE ...
+stage, opts = args[0], dict(zip(args[1::2], args[2::2]))
+run = Path(opts["--run"])
+shard = opts.get("--shard", "")
+with open(os.environ["CALLS"], "a") as f:
+    f.write(f"{time.time_ns()} {os.environ['MACHINE']} {stage} {shard} {opts.get('--workers', '')}\\n")
+TUNE = ["ml-monthly", "ml-quarterly", "neural-monthly", "neural-quarterly", "transformer-monthly", "transformer-quarterly"]
+EVAL = ["statistical-monthly", "statistical-quarterly"] + TUNE
+need = {"tune": ["prepare/bundle.json"], "freeze": [f"tune/{s}/tasks/x.json" for s in TUNE],
+        "evaluate": ["prepare/bundle.json", "configs_frozen.json"], "merge": [f"evaluate/{s}/tasks/x.parquet" for s in EVAL],
+        "gates": ["merged/rows.parquet"], "analyse": ["merged/gates.json"]}
+missing = [p for p in need.get(stage, []) if not (run / p).exists()]
+if missing:
+    sys.exit(f"{stage}: missing inputs {missing}")
+if os.environ.get("FAIL") == f"{stage}-{shard}":
+    sys.exit(f"{stage} {shard}: boom")
+out = {"prepare": "prepare/bundle.json", "tune": f"tune/{shard}/tasks/x.json", "freeze": "configs_frozen.json",
+       "evaluate": f"evaluate/{shard}/tasks/x.parquet", "merge": "merged/rows.parquet", "gates": "merged/gates.json",
+       "analyse": "analysis/analysis.json"}[stage]
+time.sleep(0.2)
+(run / out).parent.mkdir(parents=True, exist_ok=True)
+(run / out).write_text(f"{stage} {shard}")
+'''
+
+MACHINES = {  # the full run's allocation in miniature: the lead tunes and evaluates the CPU shards
+    "L": {"LEAD": "1", "TUNE": "ml-monthly:3 ml-quarterly:3",
+          "EVALUATE": "ml-monthly:2 ml-quarterly:2 | statistical-monthly:4 statistical-quarterly:4"},
+    "A": {"TUNE": "neural-monthly neural-quarterly", "EVALUATE": "neural-monthly neural-quarterly"},
+    "B": {"TUNE": "transformer-monthly transformer-quarterly", "EVALUATE": "transformer-quarterly | transformer-monthly"},
+}
+
+
+def _machines(tmp_path, env, fail=None):
+    environ, bucket = env
+    fake = tmp_path / "fake_cli.py"
+    fake.write_text(FAKE_CLI, encoding="utf-8")
+    python = tmp_path / "python"
+    python.write_text(f"#!/bin/bash\nexec {shutil.which('python3') or 'python3'} {fake} \"$@\"\n", encoding="utf-8")
+    python.chmod(0o755)
+    calls = tmp_path / "calls.txt"
+    procs = {}
+    for name, extra in MACHINES.items():
+        machine_env = {**environ, **extra, "MACHINE": name, "PYTHON": str(python), "CALLS": str(calls), "POLL": "1",
+                       "RETRY_SLEEP": "0", "ON_DONE": f"touch {tmp_path / ('done_' + name)}",
+                       **({"FAIL": fail} if fail and name == "B" else {})}
+        run = tmp_path / f"machine_{name}" / "full_run"
+        procs[name] = subprocess.Popen(["bash", str(SCRIPTS / "run_machine.sh"), "configs/rerun_v2.yaml", str(run), str(tmp_path / "data")],
+                                       env=machine_env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, cwd=SCRIPTS.parent)
+    out = {name: p.communicate(timeout=300)[0] for name, p in procs.items()}
+    codes = {name: p.returncode for name, p in procs.items()}
+    rows = [line.split(" ") for line in calls.read_text().splitlines()]
+    return codes, out, [(int(t), m, stage, shard, workers) for t, m, stage, shard, workers in rows], bucket / "runs" / "full_run"
+
+
+def test_machines_run_the_stages_in_order_through_the_bucket(tmp_path, env):
+    codes, out, calls, remote = _machines(tmp_path, env)
+    assert codes == {"L": 0, "A": 0, "B": 0}, out
+    first = {}
+    last = {}
+    for t, _, stage, *_ in calls:
+        first.setdefault(stage, t)
+        last[stage] = t
+    assert [stage for _, _, stage, *_ in calls].count("prepare") == 1 and calls[0][1:3] == ("L", "prepare")
+    assert last["prepare"] < first["tune"] and last["tune"] < first["freeze"] < first["evaluate"]
+    assert last["evaluate"] < first["merge"] < first["gates"] < first["analyse"]
+    assert {(m, stage, shard) for _, m, stage, shard, _ in calls if stage in ("tune", "evaluate")} == {
+        (m, stage, entry.split(":")[0]) for m, spec in MACHINES.items() for stage in ("tune", "evaluate")
+        for entry in spec[stage.upper()].replace("|", " ").split()}
+    assert {(stage, shard, w) for _, _, stage, shard, w in calls if shard.startswith(("ml", "statistical"))} == {
+        ("tune", "ml-monthly", "3"), ("tune", "ml-quarterly", "3"), ("evaluate", "ml-monthly", "2"),
+        ("evaluate", "ml-quarterly", "2"), ("evaluate", "statistical-monthly", "4"), ("evaluate", "statistical-quarterly", "4")}
+    assert all((tmp_path / f"done_{m}").exists() for m in MACHINES)          # ON_DONE after success
+    assert (remote / "analysis" / "analysis.json").exists() and (remote / "coordination" / "analyse.done.json").exists()
+    for m in ("A", "B"):                                                      # what the others fetched
+        run = tmp_path / f"machine_{m}" / "full_run"
+        assert (run / "prepare" / "bundle.json").exists() and (run / "configs_frozen.json").exists()
+        assert not (run / "merged").exists()
+
+
+def test_a_failed_shard_stops_the_lead_before_the_merge_and_keeps_machines_up(tmp_path, env):
+    codes, out, calls, remote = _machines(tmp_path, env, fail="evaluate-transformer-quarterly")
+    assert codes["B"] != 0 and codes["L"] != 0 and codes["A"] == 0, out
+    assert "failed elsewhere: evaluate-transformer-quarterly" in out["L"]
+    assert not any(stage in ("merge", "gates", "analyse") for _, _, stage, *_ in calls)
+    assert (remote / "coordination" / "evaluate-transformer-quarterly.failed.json").exists()
+    assert (remote / "logs" / "evaluate-transformer-quarterly.log").exists()
+    assert not (tmp_path / "done_B").exists() and not (tmp_path / "done_L").exists() and (tmp_path / "done_A").exists()
+
+
+def test_run_machine_knows_every_shard_of_the_protocol():
+    import re
+
+    from src.stages.tasks import tuning_tasks
+    from src.forecast.registry import FAMILIES
+
+    text = (SCRIPTS / "run_machine.sh").read_text(encoding="utf-8")
+    tune = re.search(r'^TUNE_SHARDS_ALL="([^"]+)"', text, re.M).group(1).split()
+    evaluate = re.search(r'^EVALUATE_SHARDS_ALL="([^"]+)"', text, re.M).group(1).replace("$TUNE_SHARDS_ALL", " ".join(tune)).split()
+    assert sorted(tune) == sorted({t.shard for t in tuning_tasks()})
+    assert sorted(evaluate) == sorted(f"{f}-{q}" for f in FAMILIES for q in ("monthly", "quarterly"))
