@@ -68,10 +68,17 @@ def tuning_tasks() -> list[Task]:
 
 def evaluation_tasks(bucket_summary: pd.DataFrame, samples: pd.DataFrame, main_seed: int,
                      extra_seeds: list[int]) -> list[Task]:
-    """All evaluation tasks from the prepare bundle's bucket summary and samples."""
+    """All evaluation tasks from the prepare bundle's bucket summary and samples.
+
+    The features are those of the bundle (all six, or the pilot's subset)."""
+    features = [name for name in FEATURE_NAMES if name in set(bucket_summary["feature_name"])]
+    if not features:
+        raise ValueError("the bucket summary holds no feature")
+    if extra_seeds and SEED_CHECK_FEATURE not in features:
+        raise ValueError(f"the seed check needs the {SEED_CHECK_FEATURE} sample")
     tasks: list[Task] = []
     for f in FREQUENCIES:
-        for feature in FEATURE_NAMES:
+        for feature in features:
             summary = bucket_summary[(bucket_summary["frequency"] == f) & (bucket_summary["feature_name"] == feature)]
             if len(summary) != 1:
                 raise ValueError(f"bucket summary must hold one row for {feature} {f}")
@@ -128,7 +135,8 @@ def grid_counts(tasks: list[Task]) -> dict:
     stat_chunks = [t for t in tasks if t.kind == "statistical"]
     return {
         "cohort_global": sum(t.priority == 0 for t in g),
-        "cohort_statistical_views": len({(f, m, s) for t in stat_chunks for f, m, s in [(t.frequency, t.model, t.strategy)]}) * len(FEATURE_NAMES),
+        "cohort_statistical_views": len({(t.frequency, t.model, t.strategy) for t in stat_chunks})
+                                    * len({t.feature_name for t in g if t.priority == 0}),
         "tercile": sum(t.priority == 1 for t in g),
         "seed_check": sum(t.priority == 2 for t in g),
         "statistical_chunks": len(stat_chunks),
