@@ -1,61 +1,81 @@
-# Forecasting Pipeline
+# Rerun v2 pipeline
 
-This repository runs leakage-safe M3/M4 forecasting experiments across six time-series feature regimes, monthly and quarterly frequencies, three STL strategies, four model families, and optional post-global fine-tuning.
+This pipeline implements the signed-off rerun protocol for the study of STL decomposition and
+feature-specialised training on M3/M4 (`docs/protocol/rerun_protocol.pdf`, version history in its
+change log). Every decision (D1–D30), test (U1–U19, I1–I5) and gate (G1–G13) cited in the code
+refers to that document.
 
-The code is designed for interruptible Vast.ai machines:
+Nothing in the pipeline substitutes a result. Every forecast comes from a trained model, and a
+failure is recorded as a failure, never replaced. Every output carries the code commit, the
+environment lock, the data manifest, the prepare bundle and the frozen configurations it came from.
 
-- deterministic feature sampling manifests
-- fold-safe feature computation and STL decomposition
-- atomic output writes
-- resumable task checkpoints
-- Optuna SQLite study paths for auto-model runs
-- heartbeat, sync, verification, and opt-in Vast.ai destruction scripts
+## Environment
 
-The execution engine includes production integrations points for `statsforecast`, `mlforecast`, `neuralforecast`, and transformer auto classes. Smoke mode also has deterministic fallback forecasters so the pipeline can validate on machines where heavyweight GPU dependencies are not yet available.
+Python 3.11.10 with the pinned lock in `environment/` (see `environment/README.md`). Stages refuse
+to run from a working tree with uncommitted changes. On a machine without git metadata,
+`RERUN_CODE_COMMIT` must hold the full 40-character commit.
 
-## Local Smoke Test
+## Data
 
-```bash
-bash scripts/run_smoke.sh
-```
+The frozen M3/M4 copy `m3m4-v1` is described by `data_manifest/m3m4_v1.json`. Fetching and
+verifying it is described in `data_manifest/README.md`. The loader reads nothing else.
 
-## Vast.ai Full Run
-
-```bash
-VAST_AUTO_DESTROY=1 OUTPUT_SYNC_URI="<my-sync-target>" bash scripts/run_all_vast.sh
-```
-
-`VAST_AUTO_DESTROY=1` destroys the Vast.ai instance only after output sync and artifact verification succeed. Auto-destroy is disabled by default.
-
-## CLI
+## Stages
 
 ```bash
-python -m src.main \
-  --config configs/base.yaml \
-  --monthly-config configs/monthly.yaml \
-  --quarterly-config configs/quarterly.yaml \
-  --vast-config configs/vast_gpu.yaml \
-  --run-root outputs \
-  --budget smoke \
-  --resume true
+python -m src.cli freeze-data verify --data-dir DATA            # the frozen copy is intact
+python -m src.cli prepare  --config configs/rerun_v2.yaml --run RUN --data-dir DATA [--jobs N|auto]
+python -m src.cli tune     --config configs/rerun_v2.yaml --run RUN --data-dir DATA --shard FAMILY-FREQUENCY
+python -m src.cli freeze   --config configs/rerun_v2.yaml --run RUN
+python -m src.cli evaluate --config configs/rerun_v2.yaml --run RUN --data-dir DATA --shard FAMILY-FREQUENCY
+python -m src.cli merge    --run RUN
+python -m src.cli gates    --run RUN                             # exit code 1 if any gate fails
+python -m src.cli analyse  --run RUN --out OUT
 ```
 
-Useful filters:
+Shards are family–frequency pairs: `statistical-`, `ml-`, `neural-` and `transformer-` with
+`monthly` or `quarterly`. Tuning has no statistical shards.
 
-- `--features feature_non_normality,feature_arch_stat`
-- `--frequencies monthly`
-- `--models AutoETS,AutoRidge,AutoNLinear`
-- `--decomposition-methods without_stl,stl_seasonal_naive`
-- `--finetuning-modes no_finetune,finetune_by_feature_bucket`
+| Stage | Writes (under `RUN/`) | Refuses |
+|---|---|---|
+| prepare (R1) | `prepare/`: eligibility, features, samples, buckets, tuning set, cutoffs, `bundle.json` | an existing bundle; a resume with other inputs |
+| tune (R2) | `tune/<shard>/`: one entry per study, `studies.sqlite` | a configuration, manifest or prepare file that differs from the bundle's |
+| freeze (R2b) | `configs_frozen.json` with its hash | a missing study; studies with different provenance; an existing file |
+| evaluate (R3) | `evaluate/<shard>/tasks/`: one parquet and completion record per task | any provenance other than the frozen configurations' (see D16 below) |
+| merge (R4) | `merged/`: rows, failed rows, `merge.json` with a result hash | changed or unknown outputs; mismatched hashes (U15); unpaired tercile rows (U14) |
+| gates | `merged/gates.json` | — (reports G1–G13) |
+| analyse (R5) | every table and figure of the protocol's Table 6, `analysis.json` | failed or stale gates; a non-empty output folder |
 
-## Budget Modes
+Interrupted stages resume. A finished task is skipped only if its record and output still match
+the current provenance; a task produced under other provenance stops the stage instead of being
+mixed in.
 
-- `smoke`: one feature, 20 M3 + 20 M4 per frequency, one window, one model per family, tiny bucket fine-tuning.
-- `pilot`: two features, 100 M3 + 100 M4 per frequency, two windows, 10 trials.
-- `full`: six features, 750 + 750 per frequency, three windows, 50 trials, bucket fine-tuning enabled, series fine-tuning disabled.
-- `large`: six features, 750 + 750 per frequency, three windows, 100 trials, optional series fine-tuning via config.
+**Failures (D16).** A statistical model's failure on a series is a failed row; the task goes on.
+A global task that raises is retried once. If it fails again it is listed in
+`evaluate/<shard>/failures/` and the stage ends with an error after the remaining tasks. After the
+cause is fixed and committed, only the listed task is rerun:
 
-## Notes
+```bash
+python -m src.cli evaluate ... --shard SHARD --only TASK_ID
+```
 
-Feature values used for sampling are computed from historical training portions only. Rolling validation recomputes fold-safe features from each fold's training history. STL/MSTL is fitted inside each fold only, never on the full series before validation.
+The fix must descend from the frozen commit, and the environment, data, bundle and configurations
+must be unchanged. The rerun is entered in `evaluate/<shard>/d16_reruns.json`, the only way the
+merge accepts a second commit (G4), and the protocol's change log records it.
 
+## Pilot
+
+The pilot (protocol Section 8) uses the same code with a configuration that adds
+`features: [feature_evolving_seasonality, feature_nonlinearity]`, empty `seed_check_seeds`, and
+its own sample, tuning-set and trial counts. Pilot results are never reported.
+
+## Tests
+
+```bash
+python -m pytest tests -p no:cacheprovider
+```
+
+The stage tests build a small synthetic frozen copy. Some replace the model fits with cheap
+deterministic stand-ins, so that the stages, the engine, merge, gates and analysis are tested
+end to end. The statistical procedures are checked against reference implementations and exact
+enumeration (U19).

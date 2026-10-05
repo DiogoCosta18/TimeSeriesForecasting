@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import ast
 import inspect
+from pathlib import Path
 
 import numpy as np
 import optuna
@@ -71,6 +72,29 @@ def test_u9_model_layer_has_no_recovery_or_stub_paths(module):
     code = ast.unparse(tree)  # code only: comments are gone too
     for word in ("fallback", "baseline", "seasonal_naive", "identity_scale", "jitter", "_safe_"):
         assert word not in code
+
+
+def _code_without_docstrings(path) -> str:
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    for node in ast.walk(tree):
+        body = getattr(node, "body", None)
+        if isinstance(body, list) and body and isinstance(body[0], ast.Expr) and isinstance(getattr(body[0], "value", None), ast.Constant):
+            body.pop(0)
+    return ast.unparse(tree)
+
+
+def test_u9_the_legacy_forecasting_paths_are_deleted():
+    """Deleted, not switched off: no legacy package, no baselines.py, no strict switch, and no
+    module anywhere in src holds a fallback, substitute or jitter path."""
+    src = Path(models.__file__).resolve().parents[1]
+    for gone in ("models", "training", "transforms", "evaluation", "main.py"):
+        assert not (src / gone).exists(), gone
+    for path in sorted(src.rglob("*.py")):
+        code = _code_without_docstrings(path)
+        for word in ("fallback", "baseline", "jitter", "identity_scale", "_safe_", "strict_mode", "nonstrict", "non_strict", "placeholder"):
+            assert word not in code, (path.name, word)
+        for legacy in ("src.models", "src.training", "src.transforms", "src.evaluation"):
+            assert legacy not in code, (path.name, legacy)
 
 
 def test_registry_holds_the_twelve_models_of_the_protocol():

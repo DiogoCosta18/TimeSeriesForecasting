@@ -6,7 +6,6 @@ import pytest
 
 from src.features import compute_all
 from src.features.compute_all import compute_feature_table
-from src.training.run_experiment import _limit_candidate_series_for_feature_compute
 
 
 def _df(n_series: int = 6, n_obs: int = 120) -> pd.DataFrame:
@@ -50,18 +49,3 @@ def test_feature_cache_refuses_other_parameters(tmp_path):
     with pytest.raises(ValueError, match="was written with"):
         compute_feature_table(data, 12, 18, n_windows=2, cache_dir=tmp_path, frequency="monthly")
 
-
-def test_pilot_candidate_limit_per_source():
-    data = _df(n_series=20)
-
-    class Logger:
-        def info(self, *args, **kwargs):
-            pass
-
-        def warning(self, *args, **kwargs):
-            pass
-
-    limited = _limit_candidate_series_for_feature_compute(data, max_per_source=3, seed=123, frequency="monthly", logger=Logger())
-    counts = limited[["unique_id", "source_dataset"]].drop_duplicates().groupby("source_dataset").size()
-    assert counts.max() == 3
-    assert limited["unique_id"].nunique() == 6
