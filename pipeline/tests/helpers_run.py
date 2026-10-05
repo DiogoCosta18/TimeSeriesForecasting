@@ -76,7 +76,8 @@ def fake_fits(patch) -> None:
     def fit_predict_global(model, params, train, h, season_length, seed, *, trained_steps=None, config_key=None, timings=None):
         if timings is not None:
             timings.update(fit_seconds=1.0, predict_seconds=0.1)
-        return {uid: ForecastResult(np.full(h, level(g["y"], model)), SOURCE[family(model)], BACKEND[family(model)], "test", h,
+        pool = 0.001 * train["unique_id"].nunique()  # the pool matters, so specialisation has an effect
+        return {uid: ForecastResult(np.full(h, level(g["y"], model) + pool), SOURCE[family(model)], BACKEND[family(model)], "test", h,
                                     config_key=config_key, seed=seed)
                 for uid, g in train.groupby("unique_id", sort=True)}
 
@@ -86,9 +87,13 @@ def fake_fits(patch) -> None:
 
 def complete_studies(run: Path, provenance: dict) -> None:
     """Completed tuning outputs for all 90 studies (as stage R2 writes them)."""
+    import optuna
+
     from src.stages import io
+    from src.stages.io import safe_name
     from src.stages.tasks import tuning_tasks
 
+    optuna.logging.set_verbosity(optuna.logging.WARNING)
     for task in tuning_tasks():
         store = io.TaskStore(run / "tune" / task.shard, provenance)
         entry = {"model": task.model, "frequency": task.frequency, "target": task.target, "params": {},
@@ -97,6 +102,10 @@ def complete_studies(run: Path, provenance: dict) -> None:
             entry["trained_steps"] = 1
         io.write_json(store.output(task.task_id, ".json"), entry)
         store.complete(task.task_id, io.sha256_file(store.output(task.task_id, ".json")), suffix=".json")
+        study = optuna.create_study(storage=f"sqlite:///{(run / 'tune' / task.shard / 'studies.sqlite').resolve()}",
+                                    study_name=safe_name(f"{task.model}|{task.frequency}|{task.target}"), direction="minimize")
+        for value in (1.2, 1.0):
+            study.add_trial(optuna.trial.create_trial(params={}, distributions={}, value=value, user_attrs={"duration_seconds": 1.0}))
 
 
 def evaluated_run(root: Path, config: dict) -> tuple[Path, Path, Path]:
