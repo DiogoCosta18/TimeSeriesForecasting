@@ -31,6 +31,12 @@ def test_u6_rel_naive_hand_computed():
     assert rel_naive(y, worse, naive, clip=10) == 10
 
 
+def test_u6_seasonal_naive_refuses_less_than_one_season():
+    for short in ([], [1.0, 2.0, 3.0]):
+        with pytest.raises(ValueError, match="needs 4 training values"):
+            seasonal_naive_forecast(short, h=6, season_length=4)
+
+
 def test_u6_seasonal_naive_repeats_the_last_season():
     assert seasonal_naive_forecast([1, 2, 3, 4, 5, 6, 7, 8], h=6, season_length=4).tolist() == [5, 6, 7, 8, 5, 6]
     monthly = np.arange(1, 37, dtype=float)

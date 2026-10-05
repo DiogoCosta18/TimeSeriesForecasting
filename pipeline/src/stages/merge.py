@@ -14,8 +14,8 @@ The merge refuses, and writes nothing, when
   configurations, environment lock or code commit (U15); a later commit is accepted
   only for a task in its shard's D16 register;
 - a tuning study no longer matches its frozen configuration;
-- rows disagree with their task (keys, members, windows, provenance) or their
-  forecasts do not match their hashes;
+- rows disagree with their task (keys, members, windows, provenance), their forecasts
+  do not match their hashes, or a trained row lacks a positive training time;
 - a tercile row lacks exactly one cohort twin in the same bucket (U14).
 An incomplete grid is merged and reported, so gate G5 fails rather than the merge.
 A bundle whose gates passed is frozen and never rebuilt.
@@ -126,6 +126,9 @@ def _check_rows(task: Task, rows: pd.DataFrame, record: dict, expected_pairs: se
             raise MergeError(f"{tid}: a forecast does not match its hash")
     if rows.loc[status == "failed", "failure"].isna().any():
         raise MergeError(f"{tid}: a failed row has no reason")
+    times = rows.loc[status == "trained", ["fit_seconds", "predict_seconds"]].to_numpy(dtype=float)
+    if not (np.isfinite(times).all() and (times[:, 0] > 0).all() and (times[:, 1] >= 0).all()):
+        raise MergeError(f"{tid}: a trained row has a missing or non-positive training time (A9, G10)")
 
 
 def check_twins(rows: pd.DataFrame) -> dict:

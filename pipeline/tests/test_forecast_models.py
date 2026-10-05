@@ -202,3 +202,25 @@ def test_u11_neural_models_get_exactly_the_frozen_configuration_whatever_the_poo
 def test_neural_fit_requires_the_frozen_number_of_steps():
     with pytest.raises(ForecastError, match="training steps"):
         models.fit_predict_global("NLinear", sampled_params("NLinear", 4, 1), pool(4, (30, 31), 4, 1), 8, 4, SEED)
+
+
+@pytest.mark.parametrize("m", [12, 4])
+def test_statistical_models_carry_the_may_runs_arguments(m):
+    """Approximate AutoARIMA; SARIMA forces one seasonal difference (D = 1); AutoETS."""
+    arima, sarima, ets = (models.statistical_model(name, m) for name in STATISTICAL_MODELS)
+    assert (type(arima).__name__, arima.season_length, arima.D, arima.approximation) == ("AutoARIMA", m, None, True)
+    assert (type(sarima).__name__, sarima.season_length, sarima.D, sarima.approximation) == ("AutoARIMA", m, 1, True)
+    assert (type(ets).__name__, ets.season_length) == ("AutoETS", m)
+
+
+def test_models_do_not_collapse_to_identical_forecasts():
+    """A stub or a shared fallback would make models agree bit for bit."""
+    m, h = 4, 8
+    train = pool(12, (30, 50), m, seed=1)
+    hashes = {model: models.fit_predict_global(model, sampled_params(model, m, seed=3), train, h, m, SEED,
+                                               trained_steps=None if FAMILY[model] == "ml" else 4)["S000"].forecast_hash
+              for model in GLOBAL_MODELS}
+    assert len(set(hashes.values())) == len(GLOBAL_MODELS)
+    y = train.loc[train["unique_id"] == "S000", "y"].to_numpy()
+    statistical = {models.forecast_statistical(model, y, h, m).forecast_hash for model in STATISTICAL_MODELS}
+    assert len(statistical) >= 2 and not statistical & set(hashes.values())

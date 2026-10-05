@@ -166,6 +166,14 @@ def test_merge_refuses_rows_that_disagree_with_their_task(run):
         run_merge(run_dir, manifest_path)
 
 
+@pytest.mark.parametrize("column, value", [("fit_seconds", 0.0), ("fit_seconds", np.nan), ("predict_seconds", -1.0)])
+def test_merge_refuses_trained_rows_without_a_valid_time(run, column, value):
+    run_dir, manifest_path = run
+    _rewrite(run_dir, _task_ids(run_dir, scope="cohort")[0], rows_fn=lambda r: r.assign(**{column: value}))
+    with pytest.raises(MergeError, match="non-positive training time"):
+        run_merge(run_dir, manifest_path)
+
+
 def test_merge_refuses_a_study_that_no_longer_matches_the_frozen_configuration(run):
     run_dir, manifest_path = run
     (record_path,) = run_dir.glob("tune/ml-monthly/tasks/tune__Ridge__monthly__raw.done.json")

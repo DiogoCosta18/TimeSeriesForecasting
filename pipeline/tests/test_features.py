@@ -19,7 +19,7 @@ from src.features import arch, compute_all, mstl_features, nonlinear, spectral, 
 from src.features.compute_all import compute_feature_table, compute_features_for_series, features_ok, history_end
 from src.features.errors import DecompositionError, FeatureUndefined
 from src.features.mstl_features import decompose_series
-from src.transforms.stl_transform import STLTransform
+from src.forecast.targets import component_targets, seasonal_continuation
 
 ELIGIBILITY_LENGTH = {12: 54, 4: 20}  # protocol D3: L = 3m + h
 
@@ -131,7 +131,7 @@ def test_u5_stl_raises_on_too_short_or_constant_input():
     with pytest.raises(DecompositionError, match="stl_constant_input"):
         decompose_series(np.full(40, 3.0), 12)
     with pytest.raises(DecompositionError):
-        STLTransform(season_length=4).fit(synthetic(7, 4, 0))
+        component_targets(synthetic(7, 4, 0), 4)   # the engine's path: no fallback either
 
 
 def test_u5_stl_components_add_up_to_the_series():
@@ -139,6 +139,11 @@ def test_u5_stl_components_add_up_to_the_series():
         y = synthetic(n, m, 3)
         dec = decompose_series(y, m)
         assert np.max(np.abs(dec["trend"] + dec["seasonal"] + dec["residual"] - y)) <= 1e-9
+        t = component_targets(y, m)           # the targets the models are trained on
+        np.testing.assert_array_equal(t["raw"], y)
+        assert np.max(np.abs(t["trend"] + t["seasonal"] + t["residual"] - y)) <= 1e-9
+        assert np.max(np.abs(t["nonseasonal"] + t["seasonal"] - y)) <= 1e-9
+        assert all(len(v) == n for v in t.values())
 
 
 def test_u5_stl_components_unchanged_when_test_data_is_perturbed():
@@ -149,13 +154,15 @@ def test_u5_stl_components_unchanged_when_test_data_is_perturbed():
     train, test = split_fold(g, train_end_idx=60, h=18)
     train_p, test_p = split_fold(perturbed, train_end_idx=60, h=18)
     assert not test["y"].equals(test_p["y"])
-    a = STLTransform(season_length=12).fit(train["y"].to_numpy()).components()
-    b = STLTransform(season_length=12).fit(train_p["y"].to_numpy()).components()
+    a = component_targets(train["y"].to_numpy(), 12)
+    b = component_targets(train_p["y"].to_numpy(), 12)
+    assert all(len(v) == 60 for v in a.values())   # fitted on the training slice only
     for key in a:
         np.testing.assert_array_equal(a[key], b[key])
 
 
-def test_stl_seasonal_forecast_repeats_the_last_cycle():
-    tr = STLTransform(season_length=4).fit(synthetic(40, 4, 5))
-    last = tr.components()["seasonal"][-4:]
-    np.testing.assert_array_equal(tr.forecast_seasonal(10), np.tile(last, 3)[:10])
+def test_stl_sn_continues_the_last_seasonal_cycle():
+    seasonal = component_targets(synthetic(40, 4, 5), 4)["seasonal"]
+    np.testing.assert_array_equal(seasonal_continuation(seasonal, 10, 4), np.tile(seasonal[-4:], 3)[:10])
+    with pytest.raises(ValueError, match="shorter than one season"):
+        seasonal_continuation(seasonal[:3], 10, 4)
