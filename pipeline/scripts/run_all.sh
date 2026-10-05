@@ -7,6 +7,7 @@
 #   scripts/run_all.sh CONFIG RUN_DIR DATA_DIR
 #
 # Run from the pipeline folder with the pinned environment's python on PATH (or PYTHON=...).
+# STAT_WORKERS and ML_WORKERS (default 1) set evaluate --workers for the statistical and ML shards.
 # DRY_RUN=1 prints the stage commands instead of running them. The script stops at the first
 # failed stage (a failed gate included), after the sync has finished.
 set -euo pipefail
@@ -28,7 +29,14 @@ in_turn() {  # in_turn STAGE SHARD...: one stage over several shards, one after 
   local name=$1
   shift
   for shard in "$@"; do
-    stage "$name-$shard" "$name" --config "$CONFIG" --run "$RUN" --data-dir "$DATA" --shard "$shard"
+    local extra=()
+    if [ "$name" = evaluate ]; then
+      case $shard in
+        statistical-*) extra=(--workers "${STAT_WORKERS:-1}") ;;
+        ml-*) extra=(--workers "${ML_WORKERS:-1}") ;;
+      esac
+    fi
+    stage "$name-$shard" "$name" --config "$CONFIG" --run "$RUN" --data-dir "$DATA" --shard "$shard" "${extra[@]}"
   done
 }
 

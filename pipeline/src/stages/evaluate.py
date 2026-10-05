@@ -17,6 +17,7 @@ the merge needs to accept that task's commit (G4). Resolved failures are kept in
 from __future__ import annotations
 
 import logging
+import time
 import traceback
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import asdict
@@ -74,23 +75,24 @@ def _resolve_failure(store: TaskStore, task_id: str, register_path: Path | None,
     store.clear_failure(task_id)
 
 
-def compute_task(job: dict) -> tuple[pd.DataFrame | None, list[str]]:
-    """One task's rows, in the main process or a worker; a global task is retried once (D16)."""
-    task = job["task"]
+def compute_task(job: dict) -> tuple[pd.DataFrame | None, list[str], float]:
+    """One task's rows, failed attempts and compute seconds, in the main process or a worker;
+    a global task is retried once (D16)."""
+    task, start = job["task"], time.perf_counter()
     if task.kind == "statistical":
         rows = pd.concat([engine.evaluate_statistical_series(task.model, task.frequency, task.strategy, series, job["cutoffs"],
                                                              job["h"], job["m"], job["prov"]) for series in job["series"]],
                          ignore_index=True)
-        return rows, []
+        return rows, [], time.perf_counter() - start
     attempts = []
     for _ in range(2):
         try:
             return engine.evaluate_global_task(job["spec"], job["pool"], job["cutoffs"], job["entries"], job["bucket_of"],
-                                               job["h"], job["m"], job["prov"]), attempts
+                                               job["h"], job["m"], job["prov"]), attempts, time.perf_counter() - start
         except Exception as exc:  # D16: retried once, then listed
             attempts.append(f"{type(exc).__name__}: {exc}")
             log.error("%s failed:\n%s", task.task_id, traceback.format_exc())
-    return None, attempts
+    return None, attempts, time.perf_counter() - start
 
 
 def run_evaluate(run_dir: Path, config: dict, data_dir: Path, shard: str, manifest_path: Path = DEFAULT_MANIFEST,
@@ -145,7 +147,7 @@ def run_evaluate(run_dir: Path, config: dict, data_dir: Path, shard: str, manife
 
     failed, finished = [], 0
 
-    def finish(task, rows, attempts) -> None:
+    def finish(task, rows, attempts, seconds) -> None:
         nonlocal finished
         finished += 1
         if rows is None:
@@ -155,7 +157,7 @@ def run_evaluate(run_dir: Path, config: dict, data_dir: Path, shard: str, manife
             rows.insert(0, "task_id", task.task_id)
             sha = write_parquet(store.output(task.task_id), rows)
             store.complete(task.task_id, sha, {"rows": int(len(rows)), "failed_rows": int((rows["status"] != "trained").sum()),
-                                               "failed_attempts": attempts})
+                                               "failed_attempts": attempts, "compute_seconds": round(seconds, 3)})
             _resolve_failure(store, task.task_id, register_path, frozen["provenance"]["code_commit"])
         beat.update(task=task.task_id, done=finished, total=len(tasks), failed=len(failed))
 

@@ -21,6 +21,6 @@ for path in "$@"; do
   FILTERS+=(--include "/$path" --include "/$path/**")
 done
 mkdir -p "$DEST_DIR"
-"$RCLONE" copy "$SRC" "$DEST_DIR" --checksum "${FILTERS[@]}" --log-level NOTICE
-"$RCLONE" check "$SRC" "$DEST_DIR" --checksum --one-way "${FILTERS[@]}" --log-level NOTICE
+"$RCLONE" copy "$SRC" "$DEST_DIR" --checksum --fast-list "${FILTERS[@]}" --log-level NOTICE
+"$RCLONE" check "$SRC" "$DEST_DIR" --checksum --one-way --fast-list "${FILTERS[@]}" --log-level NOTICE
 echo "$(date -u +%FT%TZ) fetched and verified: $SRC -> $DEST_DIR"

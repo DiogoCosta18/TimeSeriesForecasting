@@ -9,7 +9,8 @@
 # bucket with the same checksum; the exit code is non-zero if that fails.
 # `rclone copy` never deletes anything in the bucket, so no machine can remove another
 # machine's outputs. Temporary files of atomic writes (.*.tmp) are not uploaded. A failed
-# intermediate copy (network) is reported and retried at the next interval.
+# intermediate copy (network) is reported and retried at the next interval. Each call lists the
+# bucket once, recursively (--fast-list), to keep B2 transactions few.
 set -euo pipefail
 RUN_DIR=${1:?usage: sync_run.sh RUN_DIR [INTERVAL_SECONDS]}
 INTERVAL=${2:-300}
@@ -20,7 +21,7 @@ RUN_DIR=$(realpath "$RUN_DIR")
 DEST="$REMOTE:$RERUN_BUCKET/runs/$(basename "$RUN_DIR")"
 FILTERS=(--exclude ".*.tmp" --exclude "/.sync_stop")
 
-copy() { "$RCLONE" copy "$RUN_DIR" "$DEST" --checksum "${FILTERS[@]}" --log-level NOTICE; }
+copy() { "$RCLONE" copy "$RUN_DIR" "$DEST" --checksum --fast-list "${FILTERS[@]}" --log-level NOTICE; }
 
 while [ ! -e "$RUN_DIR/.sync_stop" ]; do
   copy || echo "$(date -u +%FT%TZ) sync to $DEST failed; retrying in ${INTERVAL}s" >&2
@@ -31,5 +32,5 @@ while [ ! -e "$RUN_DIR/.sync_stop" ]; do
   done
 done
 copy
-"$RCLONE" check "$RUN_DIR" "$DEST" --checksum --one-way "${FILTERS[@]}" --log-level NOTICE
+"$RCLONE" check "$RUN_DIR" "$DEST" --checksum --one-way --fast-list "${FILTERS[@]}" --log-level NOTICE
 echo "$(date -u +%FT%TZ) final sync verified: $DEST"
