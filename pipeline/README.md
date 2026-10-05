@@ -69,6 +69,8 @@ Outputs and logs go to the private bucket while stages run. `RERUN_BUCKET` is se
 machine; credentials live only in the machine's rclone configuration (remote `b2rerun`).
 
 ```bash
+scripts/setup_machine.sh /workspace/data                   # tools, rclone, environment (+ I5), frozen copy verified
+scripts/run_all.sh CONFIG RUN DATA                         # every stage on one GPU machine (the pilot), synced
 scripts/sync_run.sh RUN &                                  # upload every 5 min; never deletes in the bucket
 scripts/run_stage.sh RUN evaluate-ml-monthly evaluate --config ... --run RUN --data-dir DATA --shard ml-monthly
 touch RUN/.sync_stop                                       # last upload, then rclone check; wait for it
