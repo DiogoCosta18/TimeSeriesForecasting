@@ -116,6 +116,8 @@ def run_evaluate(run_dir: Path, config: dict, data_dir: Path, shard: str, manife
              if t.shard == shard and (only is None or t.task_id in only)]
     if not tasks:
         raise StageError(f"no evaluation tasks in shard {shard!r}")
+    if workers > 1 and tasks[0].family not in ("ml", "statistical"):
+        raise StageError(f"--workers is for the CPU shards; {shard} trains on the GPU, one task at a time")
     if only is not None and len(tasks) != len(only):
         raise StageError(f"not tasks of shard {shard!r}: {sorted(set(only) - {t.task_id for t in tasks})}")
 

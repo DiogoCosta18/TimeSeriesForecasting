@@ -105,7 +105,7 @@ def test_archive_keeps_every_trial_with_its_value_and_duration(tmp_path):
         return trial.suggest_float("x", 0.0, 1.0)
 
     study.optimize(objective, n_trials=3)
-    tuning.archive_study(study, tmp_path / "s.sqlite", "probe")
+    tuning.archive_study(tuning.archived_trials(study, "probe"), tmp_path / "s.sqlite", "probe")
     stored = optuna.load_study(study_name="probe", storage=f"sqlite:///{tmp_path / 's.sqlite'}")
     for original, copy in zip(study.trials, stored.trials):
         assert copy.params == original.params and copy.value == original.value

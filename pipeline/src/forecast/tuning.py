@@ -140,16 +140,14 @@ def tune_neural(model: str, frame: pd.DataFrame, h: int, season_length: int, fit
     return study, dict(study.best_trial.params), trained_steps
 
 
-def archive_study(study: optuna.Study, storage_path: Path, study_name: str) -> None:
-    """Copy every trial into SQLite: parameters, distributions, validation MASE, start and end
+def archived_trials(study: optuna.Study, study_name: str) -> list[optuna.trial.FrozenTrial]:
+    """Every trial as it is archived: parameters, distributions, validation MASE, start and end
     times and duration (Section 5.1); the libraries' own attributes are not JSON-safe and are
-    left out."""
+    left out (which also lets a worker process hand the trials back)."""
     bad = [t.number for t in study.trials if t.state != optuna.trial.TrialState.COMPLETE]
     if bad:
         raise TuningError(f"{study_name}: trials {bad} did not complete")
-    storage = f"sqlite:///{Path(storage_path).resolve()}"
-    archive = optuna.create_study(storage=storage, study_name=study_name, direction="minimize")
-    archive.add_trials([
+    return [
         optuna.trial.FrozenTrial(
             number=t.number, state=t.state, value=t.value, values=None,
             datetime_start=t.datetime_start, datetime_complete=t.datetime_complete,
@@ -158,12 +156,24 @@ def archive_study(study: optuna.Study, storage_path: Path, study_name: str) -> N
             system_attrs={}, intermediate_values={}, trial_id=t._trial_id,
         )
         for t in study.trials
-    ])
+    ]
 
 
-def tune_study(model: str, frequency: str, target: str, frame: pd.DataFrame, h: int, season_length: int,
-               settings: dict, base_seed: int, storage_path: Path) -> dict:
-    """Run one study and return its frozen-configuration entry."""
+def archive_study(trials: list[optuna.trial.FrozenTrial], storage_path: Path, study_name: str) -> None:
+    """Copy the archived trials of one study into SQLite."""
+    storage = f"sqlite:///{Path(storage_path).resolve()}"
+    archive = optuna.create_study(storage=storage, study_name=study_name, direction="minimize")
+    archive.add_trials(trials)
+
+
+def study_name(model: str, frequency: str, target: str) -> str:
+    return config_key(model, frequency, target).replace("|", "__")
+
+
+def run_study(model: str, frequency: str, target: str, frame: pd.DataFrame, h: int, season_length: int,
+              settings: dict, base_seed: int) -> tuple[dict, list[optuna.trial.FrozenTrial]]:
+    """Run one study; return its frozen-configuration entry (without the archive reference)
+    and its trials to archive. Nothing is written, so studies can run in worker processes."""
     key = config_key(model, frequency, target)
     tpe_seed = study_seed(base_seed, model, frequency, target)
     num_samples = int(settings["num_samples"])
@@ -177,10 +187,18 @@ def tune_study(model: str, frequency: str, target: str, frame: pd.DataFrame, h: 
         entry["trained_steps"] = trained_steps
     if len(study.trials) != num_samples:
         raise TuningError(f"{key}: {len(study.trials)} trials, expected {num_samples}")
-    study_name = key.replace("|", "__")
-    archive_study(study, storage_path, study_name)
-    entry.update(params=params, best_validation_mase=float(study.best_value),
-                 study=f"{Path(storage_path).name}:{study_name}")
+    trials = archived_trials(study, study_name(model, frequency, target))
+    entry.update(params=params, best_validation_mase=float(study.best_value))
+    return entry, trials
+
+
+def tune_study(model: str, frequency: str, target: str, frame: pd.DataFrame, h: int, season_length: int,
+               settings: dict, base_seed: int, storage_path: Path) -> dict:
+    """Run one study, archive its trials and return its frozen-configuration entry."""
+    entry, trials = run_study(model, frequency, target, frame, h, season_length, settings, base_seed)
+    name = study_name(model, frequency, target)
+    archive_study(trials, storage_path, name)
+    entry["study"] = f"{Path(storage_path).name}:{name}"
     return entry
 
 
