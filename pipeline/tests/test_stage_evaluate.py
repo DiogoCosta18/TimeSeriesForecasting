@@ -13,9 +13,11 @@ import pandas as pd
 import pytest
 
 from helpers_run import COMMIT, CONFIG, synthetic_frozen_copy
+from src.data.frozen import sha256_file
 from src.forecast import engine, tuning
+from src.stages import evaluate
 from src.stages.evaluate import run_evaluate
-from src.stages.io import StageError, read_json, safe_name
+from src.stages.io import StageError, environment_lock_sha256, read_json, safe_name
 from src.stages.prepare import run_prepare
 from src.stages.tasks import evaluation_tasks, statistical_chunk_members
 
@@ -33,7 +35,9 @@ def run(prepared, tmp_path, monkeypatch):
     """A fresh run directory: the shared prepare bundle plus frozen configurations."""
     source, data_dir, manifest_path, bundle = prepared
     shutil.copytree(source / "prepare", tmp_path / "prepare")
-    tuning.write_frozen_configs(tmp_path / "configs_frozen.json", {}, {}, {"bundle_sha256": bundle["bundle_sha256"]})
+    provenance = {"code_commit": COMMIT, "environment_lock_sha256": environment_lock_sha256(),
+                  "data_manifest_sha256": sha256_file(manifest_path), "bundle_sha256": bundle["bundle_sha256"]}
+    tuning.write_frozen_configs(tmp_path / "configs_frozen.json", {}, {}, provenance)
     monkeypatch.setenv("RERUN_CODE_COMMIT", COMMIT)
     return tmp_path, data_dir, manifest_path
 
@@ -95,6 +99,10 @@ def test_global_shard_retries_once_lists_second_failures_and_resumes(run, monkey
     assert run_evaluate(run_dir, CONFIG, data_dir, "ml-quarterly", manifest_path, only={broken}) == {"shard": "ml-quarterly", "tasks": 1}
     assert fake.calls == {broken: 1}
     assert not (root / "failures" / f"{safe_name(broken)}.json").exists()
+    resolved = read_json(root / "failures" / "resolved" / f"{safe_name(broken)}.json")
+    assert resolved["resolved_by_commit"] == COMMIT and len(resolved["attempts"]) == 2
+    assert not (root / "d16_reruns.json").exists()  # same commit: a plain rerun, not a fix
+    assert read_json(root / "tasks" / f"{safe_name(flaky)}.done.json")["failed_attempts"] == ["RuntimeError: induced failure 1"]
 
     fake.calls.clear()  # a complete shard resumes to nothing
     run_evaluate(run_dir, CONFIG, data_dir, "ml-quarterly", manifest_path)
@@ -138,4 +146,48 @@ def test_evaluate_refuses_another_config_bundle_or_changed_prepare_files(run):
     cutoffs = pd.read_parquet(run_dir / "prepare" / "cutoffs.parquet")
     cutoffs.iloc[:-1].to_parquet(run_dir / "prepare" / "cutoffs.parquet", index=False)
     with pytest.raises(StageError, match="cutoffs.parquet changed"):
+        run_evaluate(run_dir, CONFIG, data_dir, "ml-quarterly", manifest_path)
+
+
+def test_another_commit_only_reruns_listed_failures_after_a_descendant_fix(run, monkeypatch):
+    """D16: the fix commit must descend from the frozen one; the rerun is registered for G4."""
+    run_dir, data_dir, manifest_path = run
+    tasks = _shard_tasks(run_dir, "ml-quarterly")
+    broken, other = tasks[0].task_id, tasks[1].task_id
+    fake = FakeGlobal({broken: 2})
+    monkeypatch.setattr(engine, "evaluate_global_task", fake)
+    with pytest.raises(StageError, match="failed twice"):
+        run_evaluate(run_dir, CONFIG, data_dir, "ml-quarterly", manifest_path)
+
+    fix = "b" * 40
+    monkeypatch.setenv("RERUN_CODE_COMMIT", fix)
+    fake.fail.clear()
+    with pytest.raises(StageError, match="another commit only reruns listed failures"):
+        run_evaluate(run_dir, CONFIG, data_dir, "ml-quarterly", manifest_path)
+    monkeypatch.setattr(evaluate, "is_ancestor", lambda old, new: False)
+    with pytest.raises(StageError, match="does not descend"):
+        run_evaluate(run_dir, CONFIG, data_dir, "ml-quarterly", manifest_path, only={broken})
+    monkeypatch.setattr(evaluate, "is_ancestor", lambda old, new: (old, new) == (COMMIT, fix))
+    with pytest.raises(StageError, match="not a listed failure"):
+        run_evaluate(run_dir, CONFIG, data_dir, "ml-quarterly", manifest_path, only={broken, other})
+    with pytest.raises(StageError, match="not tasks of shard"):
+        run_evaluate(run_dir, CONFIG, data_dir, "ml-quarterly", manifest_path, only={broken, "eval|nonexistent"})
+
+    fake.calls.clear()
+    run_evaluate(run_dir, CONFIG, data_dir, "ml-quarterly", manifest_path, only={broken})
+    root = run_dir / "evaluate" / "ml-quarterly"
+    assert fake.calls == {broken: 1}
+    register = read_json(root / "d16_reruns.json")
+    assert set(register) == {broken}
+    assert (register[broken]["main_commit"], register[broken]["fix_commit"]) == (COMMIT, fix)
+    assert register[broken]["failure"]["provenance"]["code_commit"] == COMMIT
+    assert read_json(root / "tasks" / f"{safe_name(broken)}.done.json")["provenance"]["code_commit"] == fix
+    assert read_json(root / "tasks" / f"{safe_name(other)}.done.json")["provenance"]["code_commit"] == COMMIT
+
+
+def test_evaluate_refuses_another_environment_than_tuning(run, monkeypatch):
+    run_dir, data_dir, manifest_path = run
+    monkeypatch.setattr(evaluate, "evaluation_provenance",
+                        lambda *a: engine.Provenance(COMMIT, "f" * 64, sha256_file(manifest_path), "x", "y"))
+    with pytest.raises(StageError, match="environment_lock_sha256 differs"):
         run_evaluate(run_dir, CONFIG, data_dir, "ml-quarterly", manifest_path)

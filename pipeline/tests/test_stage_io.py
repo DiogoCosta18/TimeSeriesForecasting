@@ -53,6 +53,10 @@ def test_failures_are_listed_and_cleared_after_a_successful_rerun(tmp_path):
     store.record_failure("eval|y", ["RuntimeError: a", "RuntimeError: b"])
     listed = json.loads((tmp_path / "failures" / "eval__y.json").read_text(encoding="utf-8"))
     assert listed["attempts"] == ["RuntimeError: a", "RuntimeError: b"] and listed["provenance"] == PROV
+    assert listed["history"] == []
+    TaskStore(tmp_path, {**PROV, "code_commit": "b" * 40}).record_failure("eval|y", ["RuntimeError: c"])
+    again = store.failure("eval|y")
+    assert again["attempts"] == ["RuntimeError: c"] and again["history"][0]["attempts"] == listed["attempts"]
     store.clear_failure("eval|y")
     assert not (tmp_path / "failures" / "eval__y.json").exists()
 
