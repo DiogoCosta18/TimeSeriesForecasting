@@ -191,3 +191,31 @@ def test_evaluate_refuses_another_environment_than_tuning(run, monkeypatch):
                         lambda *a: engine.Provenance(COMMIT, "f" * 64, sha256_file(manifest_path), "x", "y"))
     with pytest.raises(StageError, match="environment_lock_sha256 differs"):
         run_evaluate(run_dir, CONFIG, data_dir, "ml-quarterly", manifest_path)
+
+
+@pytest.mark.parametrize("shard", ["statistical-quarterly", "ml-quarterly"])
+def test_worker_processes_give_the_outputs_of_one_process(run, tmp_path, monkeypatch, shard):
+    """--workers only changes speed: every task output is byte-identical to a one-process run."""
+    from helpers_run import fake_fits
+
+    from src.forecast.registry import config_key
+    from src.stages.tasks import tuning_tasks
+
+    run_dir, data_dir, manifest_path = run
+    fake_fits(monkeypatch)  # inherited by the forked workers
+    record = read_json(run_dir / "configs_frozen.json")
+    entries = {config_key(t.model, t.frequency, t.target): {"model": t.model, "frequency": t.frequency, "target": t.target,
+                                                             "params": {}, **({} if t.family == "ml" else {"trained_steps": 1})}
+               for t in tuning_tasks()}
+    (run_dir / "configs_frozen.json").unlink()
+    tuning.write_frozen_configs(run_dir / "configs_frozen.json", entries, {}, record["provenance"])
+    only = {t.task_id for t in _shard_tasks(run_dir, shard)[:20]}
+    other = tmp_path / "parallel"
+    shutil.copytree(run_dir, other)
+    run_evaluate(run_dir, CONFIG, data_dir, shard, manifest_path, only=only)
+    run_evaluate(other, CONFIG, data_dir, shard, manifest_path, only=only, workers=3)
+    one, many = (sorted((d / "evaluate" / shard / "tasks").glob("*.parquet")) for d in (run_dir, other))
+    assert [p.name for p in one] == [p.name for p in many] and len(one) == len(only)
+    for a, b in zip(one, many):
+        assert a.read_bytes() == b.read_bytes(), a.name
+    assert read_json(other / "evaluate" / shard / "heartbeat.json")["done"] == len(one)
