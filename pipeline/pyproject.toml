@@ -16,5 +16,7 @@ include = ["src*"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
-addopts = "-q -m 'not integration'"
+# fugue's pytest plugins (installed with statsforecast) import numpy at start-up, before
+# conftest.py can apply the numeric pins of src/__init__.py; the tests do not use them.
+addopts = "-q -m 'not integration' -p no:fugue_test -p no:fugue_test_fixtures"
 markers = ["integration: I1 and I4, real fits end to end (minutes); run with -m integration"]
