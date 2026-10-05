@@ -38,15 +38,21 @@ def write_dataframe(path: Path, df: pd.DataFrame) -> None:
     os.replace(tmp, path)
 
 
-def effective_cpu_count(cpu_max_path: Path = Path("/sys/fs/cgroup/cpu.max")) -> int:
-    """CPUs this process may use: its affinity mask, capped by a cgroup v2 quota when one is
-    set (inside a container os.cpu_count() reports the host's cores)."""
+def effective_cpu_count(cgroup_root: Path = Path("/sys/fs/cgroup")) -> int:
+    """CPUs this process may use: its affinity mask, capped by the container's CPU quota when
+    one is set, from cgroup v2 (cpu.max) or v1 (cpu/cpu.cfs_quota_us); inside a container
+    os.cpu_count() and the affinity mask report the host's cores."""
     cores = len(os.sched_getaffinity(0)) if hasattr(os, "sched_getaffinity") else (os.cpu_count() or 1)
-    path = Path(cpu_max_path)
-    if path.exists():
-        quota, *period = path.read_text(encoding="utf-8").split()
+    root = Path(cgroup_root)
+    if (root / "cpu.max").exists():
+        quota, *period = (root / "cpu.max").read_text(encoding="utf-8").split()
         if quota != "max":
             cores = min(cores, float(quota) / float(period[0] if period else 100000))
+    elif (root / "cpu" / "cpu.cfs_quota_us").exists():
+        quota = float((root / "cpu" / "cpu.cfs_quota_us").read_text(encoding="utf-8"))
+        period = float((root / "cpu" / "cpu.cfs_period_us").read_text(encoding="utf-8"))
+        if quota > 0:
+            cores = min(cores, quota / period)
     return max(1, int(cores))
 
 
