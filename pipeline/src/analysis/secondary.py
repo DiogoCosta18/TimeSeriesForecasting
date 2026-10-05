@@ -165,6 +165,12 @@ def a14_correlations(tables: dict) -> pd.DataFrame:
 
 # --- Section 3.1 (A1) and Section 4 descriptives --------------------------------------
 
+def _trained_weighted_mean(g: pd.DataFrame) -> float:
+    """Mean RelNaive over a configuration's scopes, weighted by their trained instances."""
+    weights = (g["n"] - g["n_failed"]).to_numpy(dtype=float)
+    return float(np.average(g["relnaive_mean"], weights=weights)) if weights.sum() > 0 else np.nan
+
+
 def a1_standing(main: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
     g = main.groupby(["family", "model", "strategy", "scope"], observed=True, sort=True)
     standing = g.agg(n=(PRIMARY, "size"), n_failed=(PRIMARY, lambda x: int(x.isna().sum())),
@@ -172,7 +178,7 @@ def a1_standing(main: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
                      mase_mean=("mase", "mean"), smape_mean=("smape", "mean"), pocid_mean=("pocid", "mean")).reset_index()
     kind = np.where(standing["scope"].astype(str) == "cohort", "cohort", "tercile")
     top = (standing.assign(scope_kind=kind).groupby(["scope_kind", "family", "model", "strategy"], observed=True)
-           .apply(lambda x: np.average(x["relnaive_mean"], weights=x["n"] - x["n_failed"]), include_groups=False)
+           .apply(_trained_weighted_mean, include_groups=False)
            .rename("relnaive_mean").reset_index().sort_values(["scope_kind", "relnaive_mean"], kind="mergesort"))
     top["rank"] = top.groupby("scope_kind").cumcount() + 1
     return standing, top
