@@ -68,8 +68,8 @@ def _window_ends(cutoffs: pd.DataFrame, ids) -> dict[int, dict[str, int]]:
     return ends
 
 
-def _component_record(target: str, res: ForecastResult) -> dict:
-    return {"target": target, "config_key": res.config_key, "backend": res.backend,
+def _component_record(target: str, res: ForecastResult, trained_steps: int | None = None) -> dict:
+    return {"target": target, "config_key": res.config_key, "trained_steps": trained_steps, "backend": res.backend,
             "backend_version": res.backend_version, "device": res.device, "seed": res.seed,
             "forecast_hash": res.forecast_hash}
 
@@ -136,7 +136,8 @@ def evaluate_global_task(task: dict, series: pd.DataFrame, cutoffs: pd.DataFrame
                 yhat = results["nonseasonal"][uid].yhat + seasonal_continuation(decomposed[uid]["seasonal"], h, season_length)
             else:
                 yhat = results["trend"][uid].yhat + results["seasonal"][uid].yhat + results["residual"][uid].yhat
-            components = [_component_record(target, results[target][uid]) for target in entries]
+            components = [_component_record(target, results[target][uid], entries[target].get("trained_steps"))
+                          for target in entries]
             naive = seasonal_naive_forecast(y_train, h, season_length)
             rows.append(_row({**keys, "bucket": buckets[uid]}, uid, source, window, train_end[uid], y_train, y_test,
                              yhat, naive, components, timing, provenance, season_length))

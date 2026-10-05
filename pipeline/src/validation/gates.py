@@ -7,6 +7,7 @@ only on a bundle whose report passed and still matches it.
 """
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import numpy as np
@@ -18,17 +19,15 @@ from src.data.frozen import DEFAULT_MANIFEST, sha256_file
 from src.data.load_m_datasets import frozen_data_provenance
 from src.forecast.engine import METRICS
 from src.forecast.metrics import RELNAIVE_CAP
-from src.forecast.registry import STRATEGY_TARGETS
+from src.forecast.registry import STRATEGY_TARGETS, config_key
 from src.stages.io import StageError, code_commit, load_bundle, read_json, sha256_json, utc_now, write_json
 from src.stages.merge import check_twins, run_provenance
 
 GATES_FORMAT = "rerun-v2-gates-1"
 STATISTICAL_FAILURE_MAX = 0.005   # G5
 CAPPED_SHARE_MAX = 0.02           # G9
-TIME_RATIO_RANGE = (2.0, 4.0)     # G10
 KS_MIN_P = 0.01                   # G11
 STL_TWIN_KEYS = ["feature_name", "frequency", "family", "model", "scope", "seed", "unique_id", "window"]
-TASK_WINDOW_KEYS = ["feature_name", "frequency", "family", "model", "scope", "seed", "window"]
 
 
 def _py(value):
@@ -179,20 +178,35 @@ def g9_finite_metrics(rows) -> dict:
             "capped_share_by_family": capped.groupby(rows["family"]).mean().to_dict()}
 
 
-def g10_time_ratio(rows) -> dict:
-    glob = rows[rows["family"] != "statistical"]
-    per_window = _key_frame(glob, TASK_WINDOW_KEYS + ["strategy"]).assign(fit_seconds=glob["fit_seconds"].to_numpy())
-    per_window = per_window.groupby(TASK_WINDOW_KEYS + ["strategy"], sort=True)["fit_seconds"].first().unstack("strategy")
-    medians = {}
-    for fam, g in per_window.groupby(level="family"):
-        if {"stl_ac", "stl_sn"} <= set(g.columns):
-            ratio = (g["stl_ac"] / g["stl_sn"]).dropna()
-            medians[fam] = float(ratio.median()) if len(ratio) else None
-        else:
-            medians[fam] = None
-    lo, hi = TIME_RATIO_RANGE
-    return {"passed": bool(medians) and all(v is not None and lo <= v <= hi for v in medians.values()),
-            "median_stl_ac_over_stl_sn": medians, "range": [lo, hi]}
+def g10_components(rows, frozen) -> dict:
+    """Every trained row holds the component forecasts its strategy defines (Direct: raw; STL-SN:
+    non-seasonal; STL-AC: trend, seasonal and residual), and every global component was made
+    with the frozen configuration and trained steps of its own target (D12-D14; defects C1, m1).
+    Replaces the training-time ratio of v1.4 (change log v1.9), which per-target tuning made
+    uninformative; that ratio is reported in A9."""
+    entries = frozen["entries"]
+    wrong_targets = wrong_configuration = 0
+    examples = []
+    for strategy, family, model, frequency, components in rows[["strategy", "family", "model", "frequency", "components"]].astype(
+            {"strategy": str, "family": str, "model": str, "frequency": str}).itertuples(index=False):
+        parsed = json.loads(components)
+        if sorted(c["target"] for c in parsed) != sorted(STRATEGY_TARGETS[strategy]):
+            wrong_targets += 1
+            examples.append(f"{model}|{frequency}|{strategy}: targets {[c['target'] for c in parsed]}")
+            continue
+        for c in parsed:
+            if family == "statistical":
+                ok = c.get("config_key") is None and c.get("trained_steps") is None
+            else:
+                key = config_key(model, frequency, c["target"])
+                ok = c.get("config_key") == key and key in entries and c.get("trained_steps") == entries[key].get("trained_steps")
+            if not ok:
+                wrong_configuration += 1
+                examples.append(f"{model}|{frequency}|{strategy}|{c['target']}: {c.get('config_key')}, steps {c.get('trained_steps')}")
+                break
+    return {"passed": wrong_targets == 0 and wrong_configuration == 0, "rows": int(len(rows)),
+            "rows_with_wrong_components": wrong_targets, "rows_with_a_component_not_from_its_frozen_study": wrong_configuration,
+            "examples": examples[:10]}
 
 
 def g11_sampling(tables) -> dict:
@@ -246,7 +260,7 @@ def run_gates(run_dir: Path, manifest_path: Path = DEFAULT_MANIFEST) -> dict:
         "G7": g7_no_leakage(tables, frozen),
         "G8": g8_minimum_history(tables, config),
         "G9": g9_finite_metrics(rows),
-        "G10": g10_time_ratio(rows),
+        "G10": g10_components(rows, frozen),
         "G11": g11_sampling(tables),
         "G12": g12_buckets(tables, config),
         "G13": hashes["G13"],

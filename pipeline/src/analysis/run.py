@@ -37,7 +37,7 @@ OUTPUTS = {
            "tables/ft_significance_counts.csv",
            "figures/cd_tercile_all.png", "figures/cd_tercile_monthly.png", "figures/cd_tercile_quarterly.png"],
     "Appendix": ["tables/a2_frequency.csv", "tables/a3_source.csv", "tables/a4_window.csv", "tables/a5_metric.csv",
-                 "tables/a6_cap.csv", "tables/a8_failures_by_model.csv", "tables/a8_task_failures.csv", "tables/a9_compute.csv",
+                 "tables/a6_cap.csv", "tables/a8_failures_by_model.csv", "tables/a8_task_failures.csv", "tables/a9_compute.csv", "tables/a9_stl_time_ratio.csv",
                  "figures/compute_cost.png", "tables/a10_studies.csv", "figures/tuning_curves.png",
                  "tables/a15_seed_spread.csv", "tables/a15_seed_labels.csv", "figures/seed_spread.png"],
 }
@@ -102,6 +102,7 @@ def run_analysis(run_dir: Path, out: Path, manifest_path: Path = DEFAULT_MANIFES
     table("a8_failures_by_model", by_model)
     table("a8_task_failures", task_failures)
     table("a9_compute", sc.a9_compute(d.rows))
+    table("a9_stl_time_ratio", sc.a9_stl_time_ratio(d.rows, d.frozen))
     spread, labels, spread_long = sc.a15_seeds(d)
     table("a15_seed_spread", spread)
     table("a15_seed_labels", labels)
