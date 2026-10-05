@@ -5,6 +5,7 @@
   p = 1 (no evidence).
 - Matched-pairs rank-biserial correlation (Kerby 2014): (R+ - R-) / (R+ + R-), ranks of
   |d| over the non-zero differences, ties averaged.
+- Spearman's rho with a bootstrap CI; a constant variable gives rho NaN and p = 1.
 - Holm's step-down adjustment within a stated family of tests.
 - Percentile bootstrap confidence intervals over series (2,000 resamples), seeded per
   contrast from the run's base seed, so every interval is reproducible.
@@ -92,8 +93,11 @@ def median_ci(x, base_seed: int, contrast_id: str) -> tuple[float, float]:
 
 
 def spearman(x, y, base_seed: int, contrast_id: str, n_resamples: int = N_BOOTSTRAP) -> dict:
-    """Spearman's rho with its p-value and a percentile bootstrap CI over series (pairs)."""
+    """Spearman's rho with its p-value and a percentile bootstrap CI over series (pairs).
+    With a constant variable the correlation is undefined: rho NaN, p = 1 (no evidence)."""
     x, y = np.asarray(x, dtype=float), np.asarray(y, dtype=float)
+    if len(x) < 3 or np.ptp(x) == 0 or np.ptp(y) == 0:
+        return {"n_series": len(x), "rho": np.nan, "p": 1.0, "rho_ci_low": np.nan, "rho_ci_high": np.nan}
     res = stats.spearmanr(x, y)
     rng = bootstrap_rng(base_seed, contrast_id)
     rhos = np.empty(n_resamples)
@@ -103,6 +107,8 @@ def spearman(x, y, base_seed: int, contrast_id: str, n_resamples: int = N_BOOTST
         rhos[i] = np.corrcoef(rx, ry)[0, 1] if rx.std() > 0 and ry.std() > 0 else np.nan
     tail = (1 - CI_LEVEL) / 2
     rhos = rhos[np.isfinite(rhos)]
+    if len(rhos) == 0:
+        rhos = np.array([np.nan])
     return {"n_series": len(x), "rho": float(res.statistic), "p": float(res.pvalue),
             "rho_ci_low": float(np.quantile(rhos, tail)), "rho_ci_high": float(np.quantile(rhos, 1 - tail))}
 

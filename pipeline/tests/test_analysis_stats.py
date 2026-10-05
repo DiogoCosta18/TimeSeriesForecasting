@@ -111,6 +111,9 @@ def test_bootstrap_is_reproducible_per_contrast_and_covers_the_median():
     assert a[0] < np.median(x) < a[1]
     s = stats.spearman(x, x + np.random.default_rng(5).normal(0, 1, 300), 7, "H4")
     assert s["rho_ci_low"] < s["rho"] < s["rho_ci_high"] and s["p"] < 1e-6
+    assert s["rho"] == pytest.approx(sps.spearmanr(x, x + np.random.default_rng(5).normal(0, 1, 300)).statistic)
+    flat = stats.spearman(x, np.zeros(300), 7, "H4")   # a constant delta: undefined, no evidence
+    assert np.isnan(flat["rho"]) and flat["p"] == 1.0
 
 
 def test_descriptives_and_weighted_median():
