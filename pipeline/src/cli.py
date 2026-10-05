@@ -4,7 +4,7 @@
     python -m src.cli prepare  --config C --run DIR --data-dir D [--jobs N|auto]
     python -m src.cli tune     --config C --run DIR --data-dir D --shard FAMILY-FREQUENCY
     python -m src.cli freeze   --config C --run DIR        # configs_frozen.json + hash
-    python -m src.cli evaluate --config C --run DIR --data-dir D --shard FAMILY-FREQUENCY [--only TASK_ID ...]
+    python -m src.cli evaluate --config C --run DIR --data-dir D --shard FAMILY-FREQUENCY [--only TASK_ID ...] [--workers N]
     python -m src.cli merge    --run DIR                   # refuses mismatched hashes
     python -m src.cli gates    --run DIR                   # G1-G13; blocks the analysis on failure
     python -m src.cli analyse  --run DIR --out OUT
@@ -37,6 +37,7 @@ def main(argv: list[str] | None = None) -> int:
             p.add_argument("--shard", required=True)
         if name == "evaluate":
             p.add_argument("--only", nargs="*", default=None, help="rerun only these task ids (D16)")
+            p.add_argument("--workers", type=int, default=1, help="processes computing tasks (CPU shards)")
         if name == "prepare":
             p.add_argument("--jobs", default="1")
     for name in ("merge", "gates"):
@@ -78,7 +79,8 @@ def main(argv: list[str] | None = None) -> int:
         from src.stages.evaluate import run_evaluate
 
         only = set(args.only) if args.only else None
-        print(run_evaluate(args.run, read_yaml(args.config), args.data_dir, args.shard, manifest, only=only))
+        print(run_evaluate(args.run, read_yaml(args.config), args.data_dir, args.shard, manifest, only=only,
+                           workers=args.workers))
     elif args.stage == "merge":
         from src.stages.merge import run_merge
 
