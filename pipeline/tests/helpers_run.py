@@ -60,7 +60,7 @@ def synthetic_frozen_copy(root: Path) -> tuple[Path, Path]:
 def fake_fits(patch) -> None:
     """Replace the model fits by cheap deterministic forecasts (a per-model level); the
     stages, the engine, STL, metrics and provenance stay real. ``patch`` is a MonkeyPatch.
-    Every fit reports one second, so STL-AC / STL-SN fit time is exactly 3 (G10)."""
+    Every fit reports one second, so the STL-AC / STL-SN fit-time ratio is exactly 3 (A9)."""
     from src.forecast import models
     from src.forecast.registry import BACKEND, MODELS, SOURCE, family
     from src.forecast.result import ForecastResult

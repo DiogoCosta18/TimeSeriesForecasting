@@ -321,6 +321,34 @@ def a9_compute(rows: pd.DataFrame) -> pd.DataFrame:
                  ).reset_index()
 
 
+def a9_stl_time_ratio(rows: pd.DataFrame, frozen: dict) -> pd.DataFrame:
+    """STL-AC / STL-SN training time per global model and frequency (median over paired task
+    windows), and for neural and transformer models divided by the ratio of trained steps
+    (T + S + R steps over non-seasonal steps): near 1 when time follows the frozen steps."""
+    from src.forecast.registry import config_key
+
+    glob = rows[rows["family"] != "statistical"]
+    keys = ["feature_name", "frequency", "family", "model", "scope", "seed", "window"]
+    per_window = (glob.astype({k: str for k in keys}).drop_duplicates(["task_id", "window"])
+                  .pivot_table(index=keys, columns="strategy", values="fit_seconds", aggfunc="first", observed=True))
+    ratio = (per_window["stl_ac"] / per_window["stl_sn"]).dropna().rename("time_ratio").reset_index()
+    table = ratio.groupby(["family", "model", "frequency"])["time_ratio"].median().reset_index()
+
+    def steps(model, frequency, target):
+        return frozen["entries"][config_key(model, frequency, target)].get("trained_steps")
+
+    step_ratio = []
+    for r in table.itertuples():
+        if r.family == "ml":
+            step_ratio.append(np.nan)
+        else:
+            step_ratio.append(sum(steps(r.model, r.frequency, t) for t in ("trend", "seasonal", "residual"))
+                              / steps(r.model, r.frequency, "nonseasonal"))
+    table["step_ratio"] = step_ratio
+    table["time_ratio_per_step_ratio"] = table["time_ratio"] / table["step_ratio"]
+    return table
+
+
 def a15_seeds(d: AnalysisData) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """Seed check: per-series spread across seeds (table and per series), and whether H1 or
     H3 labels change when another seed is used."""

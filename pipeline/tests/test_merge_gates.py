@@ -77,7 +77,9 @@ def test_complete_run_merges_reproducibly_and_passes_every_gate(run):
 
     report = run_gates(run_dir, manifest_path)
     assert report["passed"], {k: v for k, v in report["gates"].items() if not v["passed"]}
-    assert report["gates"]["G10"]["median_stl_ac_over_stl_sn"] == {"ml": 3.0, "neural": 3.0, "transformer": 3.0}
+    g10 = report["gates"]["G10"]
+    assert g10["rows"] == len(rows) and g10["rows_with_wrong_components"] == 0
+    assert g10["rows_with_a_component_not_from_its_frozen_study"] == 0
     assert report["merge_result_sha256"] == record["result_sha256"]
     with pytest.raises(MergeError, match="frozen"):
         run_merge(run_dir, manifest_path)
@@ -226,10 +228,20 @@ def test_each_gate_fails_on_its_defect(merged):
     capped.loc[capped.index[: int(0.03 * len(capped)) + 1], "relnaive"] = 50.0
     assert not gates.g9_finite_metrics(capped)["passed"]
 
-    slow = rows.copy()
-    slow.loc[(slow["strategy"] == "stl_ac") & (slow["family"] == "neural"), "fit_seconds"] *= 2
-    g10 = gates.g10_time_ratio(slow)
-    assert not g10["passed"] and g10["median_stl_ac_over_stl_sn"]["neural"] == 6.0
+    assert gates.g10_components(rows, frozen)["passed"]
+    stl_ac = rows.index[(rows["strategy"] == "stl_ac") & (rows["family"] == "neural")][0]
+    import json as _json
+    components = _json.loads(rows.at[stl_ac, "components"])
+    one_short = rows.copy()
+    one_short.at[stl_ac, "components"] = _json.dumps(components[:2])            # a component missing
+    assert gates.g10_components(one_short, frozen)["rows_with_wrong_components"] == 1
+    for field, value in (("config_key", "NHITS|monthly|raw"), ("trained_steps", 999)):
+        other = rows.copy()
+        changed = [dict(c) for c in components]
+        changed[0][field] = value                                                 # made with another study
+        other.at[stl_ac, "components"] = _json.dumps(changed)
+        g10 = gates.g10_components(other, frozen)
+        assert not g10["passed"] and g10["rows_with_a_component_not_from_its_frozen_study"] == 1
 
     late = {**tables, "features": tables["features"].assign(history_end_t=tables["features"]["history_end_t"] + 1)}
     assert not gates.g7_no_leakage(late, frozen)["passed"]
