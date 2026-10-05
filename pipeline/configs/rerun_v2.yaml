@@ -2,7 +2,8 @@
 # reads. Each value names its decision; tests/test_rerun_config.py checks them against
 # the protocol. Sections for tuning and evaluation are added with those stages.
 
-random_seed: 20260521        # s0 of Section 3.4 (same base seed as the earlier runs)
+random_seed: 20260521        # s0 of Section 3.4 (same base seed as the earlier runs); the seed of every fit (D17)
+seed_check_seeds: [20260522, 20260523]   # D17, A15: the two extra seeds (s0 + 1, s0 + 2; the protocol does not fix them)
 
 frequencies:                 # D2
   monthly:
