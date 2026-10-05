@@ -13,6 +13,7 @@ CONFIG = Path(__file__).resolve().parents[1] / "configs" / "rerun_v2.yaml"
 def test_config_matches_the_protocol():
     cfg = read_yaml(CONFIG)
     assert isinstance(cfg["random_seed"], int)
+    assert cfg["seed_check_seeds"] == [cfg["random_seed"] + 1, cfg["random_seed"] + 2]  # D17: two extra seeds
     assert cfg["frequencies"] == {
         "monthly": {"season_length": 12, "horizon": 18, "m3_group": "Monthly", "m4_group": "Monthly"},
         "quarterly": {"season_length": 4, "horizon": 8, "m3_group": "Quarterly", "m4_group": "Quarterly"},
