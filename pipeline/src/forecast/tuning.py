@@ -94,8 +94,11 @@ def tune_ml(model: str, frame: pd.DataFrame, h: int, season_length: int, fit_see
 
     template = spaces.ml_estimator(model, _any_ml_params(model), fit_seed)
     auto = AutoMLForecast(models={model: AutoModel(template, model_config)}, freq=1, init_config=init_config)
+    # No pruning: every trial is evaluated on the validation block and archived with its MASE
+    # (Section 5.1). Optuna's default median pruner would end trials after their only window
+    # once 5 trials exist, leaving them without a value (neuralforecast reports nothing to prune).
     auto.fit(frame, n_windows=1, h=h, num_samples=num_samples, loss=_mase_loss(season_length),
-             study_kwargs={"sampler": optuna.samplers.TPESampler(seed=tpe_seed)})
+             study_kwargs={"sampler": optuna.samplers.TPESampler(seed=tpe_seed), "pruner": optuna.pruners.NopPruner()})
     study = auto.results_[model]
     return study, dict(study.best_trial.params)
 
