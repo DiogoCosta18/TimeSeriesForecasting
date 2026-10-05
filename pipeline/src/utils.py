@@ -89,6 +89,18 @@ def write_dataframe(path: Path, df: pd.DataFrame) -> None:
     os.replace(tmp, path)
 
 
+def effective_cpu_count(cpu_max_path: Path = Path("/sys/fs/cgroup/cpu.max")) -> int:
+    """CPUs this process may use: its affinity mask, capped by a cgroup v2 quota when one is
+    set (inside a container os.cpu_count() reports the host's cores)."""
+    cores = len(os.sched_getaffinity(0)) if hasattr(os, "sched_getaffinity") else (os.cpu_count() or 1)
+    path = Path(cpu_max_path)
+    if path.exists():
+        quota, *period = path.read_text(encoding="utf-8").split()
+        if quota != "max":
+            cores = min(cores, float(quota) / float(period[0] if period else 100000))
+    return max(1, int(cores))
+
+
 def read_yaml(path: Path) -> dict[str, Any]:
     import yaml
 

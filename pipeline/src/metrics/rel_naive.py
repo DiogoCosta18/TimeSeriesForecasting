@@ -6,11 +6,11 @@ from .losses import mae
 
 
 def seasonal_naive_forecast(y_train, h: int, season_length: int) -> np.ndarray:
+    """The last observed season, repeated; fewer than one season of history is refused (an
+    eligible series always has more, D3), never replaced by another forecast."""
     y_train = np.asarray(y_train, dtype=float)
-    if len(y_train) == 0:
-        return np.zeros(h)
     if len(y_train) < season_length:
-        return np.repeat(y_train[-1], h)
+        raise ValueError(f"seasonal naive needs {season_length} training values, got {len(y_train)}")
     return np.asarray([y_train[-season_length + (i % season_length)] for i in range(h)], dtype=float)
 
 

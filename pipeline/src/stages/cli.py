@@ -58,8 +58,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.stage == "prepare":
         from src.stages.io import code_commit
         from src.stages.prepare import run_prepare
+        from src.utils import effective_cpu_count
 
-        jobs = os.cpu_count() if args.jobs == "auto" else int(args.jobs)
+        jobs = effective_cpu_count() if args.jobs == "auto" else int(args.jobs)
         result = run_prepare(read_yaml(args.config), args.run, args.data_dir, code_commit(), n_jobs=jobs)
         print(json.dumps({"bundle_sha256": result["bundle_sha256"], "counts": result["counts"]}, indent=2))
     elif args.stage == "tune":
