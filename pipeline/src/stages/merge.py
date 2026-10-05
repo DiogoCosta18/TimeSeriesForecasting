@@ -59,7 +59,15 @@ def run_provenance(run_dir: Path, bundle: dict, manifest_path: Path) -> tuple[di
     return main, frozen
 
 
-def _check_studies(run_dir: Path, frozen: dict) -> None:
+def _platform(task_id: str, record: dict) -> dict:
+    platform = record.get("platform")
+    if not platform:
+        raise MergeError(f"{task_id}: completion record without its platform")
+    return {k: platform[k] for k in ("cpu_model", "libc", "numba_cpu_name", "pinned")}
+
+
+def _check_studies(run_dir: Path, frozen: dict) -> dict:
+    platforms = {}
     for task in tuning_tasks():
         record_path = run_dir / "tune" / task.shard / "tasks" / f"{safe_name(task.task_id)}.done.json"
         if not record_path.exists():
@@ -72,6 +80,8 @@ def _check_studies(run_dir: Path, frozen: dict) -> None:
             raise MergeError(f"study {task.task_id}: output missing or changed")
         if read_json(output) != frozen["entries"][config_key(task.model, task.frequency, task.target)]:
             raise MergeError(f"study {task.task_id} does not match its frozen configuration")
+        platforms[task.task_id] = _platform(task.task_id, record)
+    return platforms
 
 
 def _check_provenance(task_id: str, prov: dict, main: dict, d16: dict) -> None:
@@ -154,7 +164,7 @@ def run_merge(run_dir: Path, manifest_path: Path = DEFAULT_MANIFEST) -> dict:
     config = read_json(run_dir / "prepare" / "bundle.json")["config"]
     bundle = load_bundle(run_dir, config, manifest_path)
     main, frozen = run_provenance(run_dir, bundle, manifest_path)
-    _check_studies(run_dir, frozen)
+    study_platforms = _check_studies(run_dir, frozen)
     prepare = run_dir / "prepare"
     samples = pd.read_parquet(prepare / "samples.parquet")
     buckets = pd.read_parquet(prepare / "buckets.parquet")
@@ -192,7 +202,7 @@ def run_merge(run_dir: Path, manifest_path: Path = DEFAULT_MANIFEST) -> dict:
             tasks[task_id] = {"shard": shard_dir.name, "file": f"evaluate/{shard_dir.name}/tasks/{record['file']}",
                               "sha256": record["sha256"], "rows": record["rows"], "failed_rows": record["failed_rows"],
                               "failed_attempts": record.get("failed_attempts", []),
-                              "code_commit": record["provenance"]["code_commit"]}
+                              "code_commit": record["provenance"]["code_commit"], "platform": _platform(task_id, record)}
     if set(listed) & set(tasks):
         raise MergeError(f"tasks both completed and listed as failed: {sorted(set(listed) & set(tasks))}")
     if set(d16) - set(tasks):
@@ -219,6 +229,7 @@ def run_merge(run_dir: Path, manifest_path: Path = DEFAULT_MANIFEST) -> dict:
         "grid": {"expected": len(expected), "completed": len(tasks), "listed_failures": sorted(listed), "missing": missing,
                  "counts": grid_counts(grid)},
         "tasks": tasks,
+        "study_platforms": study_platforms,
         "d16_reruns": d16,
         "failures": {"listed": listed, "resolved": resolved},
         "files": {name: {"file": f"{name}.parquet", "sha256": sha} for name, sha in files.items()},

@@ -105,10 +105,18 @@ def g4_commit_and_environment(rows, failed, record, main) -> dict:
     off = {tid: list(c) for tid, c in by_task.items() if list(c) != [main["code_commit"]]}
     d16 = record["d16_reruns"]
     unexplained = {tid: c for tid, c in off.items() if tid not in d16 or c != [d16[tid]["fix_commit"]]}
-    return {"passed": envs == [main["environment_lock_sha256"]] and not unexplained,
+    platforms = {**{tid: e["platform"] for tid, e in record["tasks"].items()}, **record["study_platforms"]}
+    not_pinned = sorted(tid for tid, p in platforms.items() if not p["pinned"])
+    cpu_by_shard = {}
+    for e in record["tasks"].values():
+        cpu_by_shard.setdefault(e["shard"], set()).add(e["platform"]["cpu_model"])
+    mixed = {s: sorted(c) for s, c in cpu_by_shard.items() if s.startswith("statistical") and len(c) > 1}
+    return {"passed": envs == [main["environment_lock_sha256"]] and not unexplained and not not_pinned and not mixed,
             "code_commit": main["code_commit"], "environment_lock_hashes": envs,
             "d16_reruns": {tid: d16[tid]["fix_commit"] for tid in sorted(off) if tid in d16},
-            "unexplained_commits": unexplained}
+            "unexplained_commits": unexplained, "tasks_without_pinned_platform": not_pinned,
+            "statistical_shards_on_several_cpu_models": mixed,
+            "cpu_models_by_shard": {s: sorted(c) for s, c in sorted(cpu_by_shard.items())}}
 
 
 def g5_grid_complete(rows, failed, record) -> dict:

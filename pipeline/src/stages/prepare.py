@@ -32,6 +32,7 @@ from src.data.sample_series import feature_sample, tercile_buckets, tuning_set
 from src.data.schemas import FEATURE_NAMES, selected_features
 from src.data.validation import make_cutoffs
 from src.features.compute_all import QUALITY_FLAG_NAMES, compute_feature_table
+from src.numeric_platform import platform_info
 from src.utils import atomic_write_json
 
 BUNDLE_FORMAT = "rerun-prepare-bundle/1"
@@ -173,6 +174,7 @@ def run_prepare(
         "config": config,
         "config_sha256": state["config_sha256"],
         "data": frozen_data_provenance(manifest_path),
+        "platform": platform_info(),
         "files": files,
         "counts": {f: parts[f]["counts"] for f in sorted(parts)},
         "bucket_summary": [r for f in sorted(parts) for r in parts[f]["bucket_summary"].to_dict("records")],

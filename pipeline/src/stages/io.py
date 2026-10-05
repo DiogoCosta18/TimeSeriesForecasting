@@ -21,6 +21,7 @@ import pandas as pd
 
 from src.data.frozen import DEFAULT_MANIFEST, sha256_file
 from src.forecast.engine import Provenance
+from src.numeric_platform import platform_info
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 LOCKFILE = REPO_ROOT / "environment" / "requirements-lock-linux-cu121.txt"
@@ -151,7 +152,8 @@ class TaskStore:
 
     def complete(self, task_id: str, sha256: str, extra: dict | None = None, suffix: str = ".parquet") -> None:
         write_json(self.record_path(task_id), {"task_id": task_id, "sha256": sha256, "file": self.output(task_id, suffix).name,
-                                               "provenance": self.provenance, "completed_at_utc": utc_now(), **(extra or {})})
+                                               "provenance": self.provenance, "completed_at_utc": utc_now(),
+                                               "platform": platform_info(), **(extra or {})})
 
     def failure_path(self, task_id: str) -> Path:
         return self.root / "failures" / f"{safe_name(task_id)}.json"

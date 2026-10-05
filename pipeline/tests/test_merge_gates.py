@@ -250,3 +250,27 @@ def test_each_gate_fails_on_its_defect(merged):
     flipped = tables["bucket_summary"].copy()
     flipped.loc[flipped.index[0], "degenerate"] = not flipped.loc[flipped.index[0], "degenerate"]
     assert not gates.g12_buckets({**tables, "bucket_summary": flipped}, SMALL)["passed"]
+
+
+def test_g4_requires_pinned_platforms_and_one_cpu_model_per_statistical_shard(merged):
+    record, rows, failed, _, _ = merged
+    assert gates.g4_commit_and_environment(rows, failed, record, record["provenance"])["passed"]
+    assert all(e["platform"]["pinned"] for e in record["tasks"].values())
+    unpinned = copy.deepcopy(record)
+    task_id = next(iter(unpinned["tasks"]))
+    unpinned["tasks"][task_id]["platform"]["pinned"] = False
+    g4 = gates.g4_commit_and_environment(rows, failed, unpinned, record["provenance"])
+    assert not g4["passed"] and g4["tasks_without_pinned_platform"] == [task_id]
+    mixed = copy.deepcopy(record)
+    stat = [t for t, e in mixed["tasks"].items() if e["shard"] == "statistical-monthly"]
+    mixed["tasks"][stat[0]]["platform"]["cpu_model"] = "Another CPU"
+    g4 = gates.g4_commit_and_environment(rows, failed, mixed, record["provenance"])
+    assert not g4["passed"] and list(g4["statistical_shards_on_several_cpu_models"]) == ["statistical-monthly"]
+
+
+def test_merge_refuses_a_record_without_its_platform(run):
+    run_dir, manifest_path = run
+    task_id = _task_ids(run_dir, scope="cohort")[0]
+    _rewrite(run_dir, task_id, record_fn=lambda r: r.pop("platform"))
+    with pytest.raises(MergeError, match="without its platform"):
+        run_merge(run_dir, manifest_path)
