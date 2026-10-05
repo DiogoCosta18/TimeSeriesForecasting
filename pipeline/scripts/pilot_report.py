@@ -12,7 +12,8 @@ four machines of Section 9.3 with its assumptions:
   model, frequency, strategy, scope), counted on the full run's prepare bundle;
 - ML training time grows with the pool (rows of the training frame); neural and transformer
   training runs a fixed number of steps, so their time is given as a range, from unchanged
-  (low) to growing with the pool (high);
+  (low) to growing with the pool (high), and, with --neural-pool-factor, as the measured
+  growth (the "measured" bound; scripts/pool_scaling measurement of the pilot);
 - statistical time grows with the number of series; tuning time with the number of trials,
   and for ML also with the tuning set;
 - machines A-D as in Section 9.3; a machine's GPU shards run in sequence; on machine D the ML
@@ -117,7 +118,7 @@ def full_task_counts(full_prepare: Path, full_config: dict) -> pd.DataFrame:
 
 
 def project(tasks: pd.DataFrame, trials: pd.DataFrame, pilot_cfg: dict, full_cfg: dict, full_prepare: Path,
-            pilot_prepare: Path, stat_workers: int = 1, ml_workers: int = 1) -> dict:
+            pilot_prepare: Path, stat_workers: int = 1, ml_workers: int = 1, neural_factor: float | None = None) -> dict:
     pool = full_cfg["sampling"]["n_per_source"] / pilot_cfg["sampling"]["n_per_source"]
     tuning_pool = full_cfg["tuning_set"]["n_per_source"] / pilot_cfg["tuning_set"]["n_per_source"]
     trial_factor = full_cfg["tuning"]["num_samples"] / pilot_cfg["tuning"]["num_samples"]
@@ -133,13 +134,17 @@ def project(tasks: pd.DataFrame, trials: pd.DataFrame, pilot_cfg: dict, full_cfg
     ml = merged["family"] == "ml"
     merged["low_hours"] = merged["full_tasks"] * merged["pilot_seconds"] * ml.map({True: pool, False: 1.0}) / 3600
     merged["high_hours"] = merged["full_tasks"] * merged["pilot_seconds"] * pool / 3600
+    bounds = ["low_hours", "high_hours"]
+    if neural_factor is not None:
+        merged["measured_hours"] = merged["full_tasks"] * merged["pilot_seconds"] * ml.map({True: pool, False: neural_factor}) / 3600
+        bounds.append("measured_hours")
     merged["shard"] = merged["family"] + "-" + merged["frequency"]
-    evaluation = merged.groupby("shard")[["low_hours", "high_hours"]].sum()
+    evaluation = merged.groupby("shard")[bounds].sum()
 
     stat = tasks[tasks["kind"] == "stat"].groupby("frequency")["seconds"].sum() / 3600
     for frequency, hours in stat.items():
         factor = full_union[frequency] / pilot_union[frequency]
-        evaluation.loc[f"statistical-{frequency}"] = [hours * factor, hours * factor]
+        evaluation.loc[f"statistical-{frequency}"] = [hours * factor] * len(bounds)
 
     study = trials.groupby(["shard", "model", "frequency", "target"])["seconds"].sum().reset_index()
     study["factor"] = trial_factor * study["model"].map(lambda m: tuning_pool if FAMILY[m] == "ml" else 1.0)
@@ -147,6 +152,9 @@ def project(tasks: pd.DataFrame, trials: pd.DataFrame, pilot_cfg: dict, full_cfg
     tuning = pd.DataFrame({"low_hours": (study["seconds"] * study["factor"]).groupby(study["shard"]).sum() / 3600,
                            "high_hours": (study["seconds"] * study["high_factor"]).groupby(study["shard"]).sum() / 3600})
     tuning.loc[tuning.index.str.startswith("ml"), "high_hours"] = tuning.loc[tuning.index.str.startswith("ml"), "low_hours"]
+    if neural_factor is not None:
+        study["measured_factor"] = trial_factor * study["model"].map(lambda m: tuning_pool if FAMILY[m] == "ml" else neural_factor)
+        tuning["measured_hours"] = (study["seconds"] * study["measured_factor"]).groupby(study["shard"]).sum() / 3600
 
     one_process = evaluation.copy()
     evaluation.loc[evaluation.index.str.startswith("statistical")] /= stat_workers
@@ -154,7 +162,7 @@ def project(tasks: pd.DataFrame, trials: pd.DataFrame, pilot_cfg: dict, full_cfg
     machines = {}
     for name, shards in MACHINES.items():
         res = {}
-        for bound in ("low_hours", "high_hours"):
+        for bound in bounds:
             if name == "D":
                 ml_chain = sum(tuning[bound].get(s, 0) + evaluation[bound].get(s, 0) for s in shards if s.startswith("ml"))
                 stat_chain = max(evaluation[bound].get(s, 0) for s in shards if s.startswith("statistical"))
@@ -170,7 +178,7 @@ def project(tasks: pd.DataFrame, trials: pd.DataFrame, pilot_cfg: dict, full_cfg
         "evaluation_hours": evaluation.round(2).to_dict("index"),
         "evaluation_hours_one_process": one_process.round(2).to_dict("index"),
         "machines_hours": {k: {b: round(v, 2) for b, v in r.items()} for k, r in machines.items()},
-        "wall_clock_hours": {b: round(max(r[b] for r in machines.values()), 2) for b in ("low_hours", "high_hours")},
+        "wall_clock_hours": {b: round(max(r[b] for r in machines.values()), 2) for b in bounds},
         "criterion_hours": 72,
     }
 
@@ -183,6 +191,7 @@ def main() -> int:
     ap.add_argument("--out", required=True, type=Path)
     ap.add_argument("--stat-workers", type=int, default=1)
     ap.add_argument("--ml-workers", type=int, default=1)
+    ap.add_argument("--neural-pool-factor", type=float, default=None, help="measured growth of neural fit time with the pool")
     args = ap.parse_args()
     run = args.run
     pilot_cfg = read_json(run / "prepare" / "bundle.json")["config"]
@@ -202,6 +211,8 @@ def main() -> int:
                       "tasks_retried": int(tasks.loc[tasks["family"] == fam, "failed_attempts"].gt(0).sum())}
                 for fam in sorted(rows["family"].unique())}
     expected = {p for paths in OUTPUTS.values() for p in paths}
+    if not pilot_cfg.get("seed_check_seeds"):
+        expected.discard("figures/seed_spread.png")  # no seed check, no seed figure (src/analysis/run.py)
     report = {
         "run": str(run), "code_commit": merge["provenance"]["code_commit"],
         "stages": stages,
@@ -217,7 +228,7 @@ def main() -> int:
         "i3": None if analysis is None else {"outputs_expected": len(expected), "missing": sorted(expected - set(analysis["files"]))},
         "gpu_memory": read_json(probe)["summary"] if probe.exists() else None,
         "projection": project(tasks, trials, pilot_cfg, full_cfg, args.full_prepare, run / "prepare",
-                              args.stat_workers, args.ml_workers),
+                              args.stat_workers, args.ml_workers, args.neural_pool_factor),
     }
     args.out.mkdir(parents=True, exist_ok=True)
     (args.out / "report.json").write_text(json.dumps(report, indent=2, default=str) + "\n", encoding="utf-8")
@@ -229,8 +240,9 @@ def main() -> int:
     lines += [f"- {k}: {v['hours']:.2f} (exit {v['exit']})" for k, v in stages.items() if v["hours"] is not None]
     lines += ["", "## Failures by family", ""] + [f"- {k}: {v}" for k, v in failures.items()]
     lines += ["", "## Projection of the full run (hours; low-high)", ""]
-    lines += [f"- machine {k}: {v['low_hours']:.1f} - {v['high_hours']:.1f}" for k, v in p["machines_hours"].items()]
-    lines += [f"- wall clock: {p['wall_clock_hours']['low_hours']:.1f} - {p['wall_clock_hours']['high_hours']:.1f} (criterion <= 72)"]
+    show = lambda v: f"{v['low_hours']:.1f} - {v['high_hours']:.1f}" + (f"; measured {v['measured_hours']:.1f}" if "measured_hours" in v else "")
+    lines += [f"- machine {k}: {show(v)}" for k, v in p["machines_hours"].items()]
+    lines += [f"- wall clock: {show(p['wall_clock_hours'])} (criterion <= 72)"]
     (args.out / "report.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
     print("\n".join(lines))
     return 0
