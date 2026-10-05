@@ -53,6 +53,9 @@ def main(argv: list[str] | None = None) -> int:
         return freeze_data_main(argv[1:])
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
+    from src.data import frozen
+
+    manifest = frozen.DEFAULT_MANIFEST  # the committed manifest, the only one a run uses
 
     if args.stage == "prepare":
         from src.stages.io import code_commit
@@ -60,12 +63,13 @@ def main(argv: list[str] | None = None) -> int:
         from src.utils import effective_cpu_count
 
         jobs = effective_cpu_count() if args.jobs == "auto" else int(args.jobs)
-        result = run_prepare(read_yaml(args.config), args.run, args.data_dir, code_commit(), n_jobs=jobs)
+        result = run_prepare(read_yaml(args.config), args.run, args.data_dir, code_commit(), n_jobs=jobs,
+                             manifest_path=manifest)
         print(json.dumps({"bundle_sha256": result["bundle_sha256"], "counts": result["counts"]}, indent=2))
     elif args.stage == "tune":
         from src.stages.tune import run_tune
 
-        print(run_tune(args.run, read_yaml(args.config), args.data_dir, args.shard))
+        print(run_tune(args.run, read_yaml(args.config), args.data_dir, args.shard, manifest))
     elif args.stage == "freeze":
         from src.stages.tune import run_freeze
 
@@ -74,21 +78,21 @@ def main(argv: list[str] | None = None) -> int:
         from src.stages.evaluate import run_evaluate
 
         only = set(args.only) if args.only else None
-        print(run_evaluate(args.run, read_yaml(args.config), args.data_dir, args.shard, only=only))
+        print(run_evaluate(args.run, read_yaml(args.config), args.data_dir, args.shard, manifest, only=only))
     elif args.stage == "merge":
         from src.stages.merge import run_merge
 
-        print(run_merge(args.run))
+        print(run_merge(args.run, manifest))
     elif args.stage == "gates":
         from src.validation.gates import run_gates
 
-        report = run_gates(args.run)
+        report = run_gates(args.run, manifest)
         print(json.dumps({k: v["passed"] for k, v in report["gates"].items()}, indent=2))
         return 0 if report["passed"] else 1
     elif args.stage == "analyse":
         from src.analysis.run import run_analysis
 
-        print(run_analysis(args.run, args.out))
+        print(run_analysis(args.run, args.out, manifest))
     return 0
 
 

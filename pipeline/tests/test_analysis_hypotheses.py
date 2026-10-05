@@ -170,3 +170,15 @@ def test_statistical_rows_enter_every_feature_sample_with_its_bucket():
     assert inst["main_seed"].tolist().count(True) == 3 and (inst.loc[inst["seed_key"] == S0 + 1, "main_seed"] == False).all()  # noqa: E712
     with pytest.raises(ad.AnalysisError, match="outside every feature sample"):
         ad.build_instances(rows, rows.iloc[:0], buckets[buckets["unique_id"] == "B"], S0)
+
+
+def test_a1_standing_survives_a_configuration_whose_instances_all_failed():
+    from src.analysis.secondary import a1_standing
+
+    inst = toy(stl_ml_sn)
+    inst["mase"] = inst["smape"] = inst["pocid"] = 1.0
+    inst.loc[(inst["model"] == "ETS") & (inst["strategy"] == "stl_ac"), "relnaive_capped"] = np.nan
+    standing, top = a1_standing(inst)
+    assert _row(standing, model="ETS", strategy="stl_ac")["n_failed"] == _row(standing, model="ETS", strategy="stl_ac")["n"]
+    assert np.isnan(_row(top, model="ETS", strategy="stl_ac")["relnaive_mean"])
+    assert top["relnaive_mean"].notna().sum() == len(top) - 1

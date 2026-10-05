@@ -85,8 +85,9 @@ def fake_fits(patch) -> None:
     patch.setattr(models, "fit_predict_global", fit_predict_global)
 
 
-def complete_studies(run: Path, provenance: dict) -> None:
-    """Completed tuning outputs for all 90 studies (as stage R2 writes them)."""
+def complete_studies(run: Path, provenance: dict, params_for=None) -> None:
+    """Completed tuning outputs for all 90 studies (as stage R2 writes them); ``params_for(task)``
+    gives a study's parameters (default: none, for stand-in fits)."""
     import optuna
 
     from src.stages import io
@@ -96,7 +97,8 @@ def complete_studies(run: Path, provenance: dict) -> None:
     optuna.logging.set_verbosity(optuna.logging.WARNING)
     for task in tuning_tasks():
         store = io.TaskStore(run / "tune" / task.shard, provenance)
-        entry = {"model": task.model, "frequency": task.frequency, "target": task.target, "params": {},
+        entry = {"model": task.model, "frequency": task.frequency, "target": task.target,
+                 "params": {} if params_for is None else params_for(task),
                  "best_validation_mase": 1.0, "g7_tuning_end_equals_first_cutoff": True}
         if task.family != "ml":
             entry["trained_steps"] = 1
