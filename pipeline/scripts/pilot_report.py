@@ -5,7 +5,7 @@
 
 Writes report.json and report.md with: stage and shard wall times; time per task and per
 tuning trial by family, frequency, strategy and scope; failures by family; the gate results;
-the I3 check (every output of Table 6 produced); the GPU memory measurement if
+the I3 check (every output of Table 8 produced); the GPU memory measurement if
 scripts/gpu_memory_probe.py has run; and a projection of the full run's wall-clock time on the
 four machines of Section 9.3 with its assumptions:
 - evaluation tasks are scaled by the number of full-run tasks of the same kind (family,

@@ -1,4 +1,4 @@
-"""Stage R4 merge and gates G1-G13 on a complete synthetic run (tests U14, U15; Section 7.4).
+"""Stage R4 merge and gates G1-G13 on a complete synthetic run (tests U14, U15; Section 7.3).
 
 The run is produced by the real stages and engine with cheap stand-in fits
 (helpers_run.fake_fits); one feature (as in the pilot) and one extra seed keep it small.

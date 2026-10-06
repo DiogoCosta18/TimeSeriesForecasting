@@ -1,5 +1,5 @@
 """Secondary and robustness analyses A1-A15 and the descriptive outputs of Sections 2-4
-(protocol Sections 5.5-5.6, Table 6).
+(protocol Sections 5.5-5.6, Table 8).
 
 Descriptives are at instance level, tests at series level (D27). A2, A3 and A5 repeat
 confirmatory tests on subsets or other metrics, each with its own Holm family named in

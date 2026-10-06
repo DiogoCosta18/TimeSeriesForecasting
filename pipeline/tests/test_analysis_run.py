@@ -1,4 +1,4 @@
-"""Stage R5 analyse on a gated synthetic run (protocol Section 5, Table 6; I3 on synthetic data).
+"""Stage R5 analyse on a gated synthetic run (protocol Section 5, Table 8; I3 on synthetic data).
 
 The run comes from the real stages and engine with stand-in fits (helpers_run); I3
 proper runs on the pilot outputs.

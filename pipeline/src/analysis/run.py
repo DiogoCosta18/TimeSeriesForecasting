@@ -1,7 +1,7 @@
-"""Stage R5, analyse (protocol Section 5; Table 6; test I3).
+"""Stage R5, analyse (protocol Section 5; Table 8; test I3).
 
 ``run_analysis`` reads a gated result bundle and writes every table (CSV) and figure (PNG)
-of Table 6 into ``out``, plus ``analysis.json`` with the merge and gate hashes, the
+of Table 8 into ``out``, plus ``analysis.json`` with the merge and gate hashes, the
 analysis code commit, the SHA-256 of every output and the map from paper section to
 outputs. It refuses a bundle whose gates did not pass and an ``out`` that is not empty;
 the same bundle and code give the same tables.
@@ -20,7 +20,7 @@ from src.data.frozen import DEFAULT_MANIFEST, sha256_file
 from src.stages.io import code_commit, utc_now, write_json
 
 ANALYSIS_FORMAT = "rerun-v2-analysis-1"
-# Table 6 of the protocol: paper section -> outputs (tables/*.csv, figures/*.png).
+# Table 8 of the protocol: paper section -> outputs (tables/*.csv, figures/*.png).
 OUTPUTS = {
     "S2 Data": ["tables/data_counts.csv", "figures/sampling_illustration.png", "tables/a11_ks.csv"],
     "S2 Models": ["tables/model_table.csv", "tables/search_spaces.csv", "tables/a10_frozen_configurations.csv"],
@@ -128,7 +128,7 @@ def run_analysis(run_dir: Path, out: Path, manifest_path: Path = DEFAULT_MANIFES
     produced = sorted(str(p.relative_to(out)).replace("\\", "/") for p in out.rglob("*") if p.is_file())
     absent = sorted(set(expected) - set(produced))
     if absent and not (set(absent) <= {"figures/seed_spread.png"} and not d.config["seed_check_seeds"]):
-        raise AnalysisError(f"outputs of Table 6 not produced: {absent}")
+        raise AnalysisError(f"outputs of Table 8 not produced: {absent}")
     record = {"format": ANALYSIS_FORMAT, "created_at_utc": utc_now(), "analysis_code_commit": code_commit(),
               "merge_result_sha256": d.record["result_sha256"], "gates_created_at_utc": d.gates["created_at_utc"],
               "provenance": d.record["provenance"], "outputs_by_section": OUTPUTS,
