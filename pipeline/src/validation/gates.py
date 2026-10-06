@@ -45,8 +45,9 @@ def _py(value):
     return value
 
 
-def load_merged(run_dir: Path) -> tuple[dict, pd.DataFrame, pd.DataFrame]:
-    """The merge record and its two tables, after checking they are unchanged."""
+def load_merged(run_dir: Path, columns: list[str] | None = None) -> tuple[dict, pd.DataFrame, pd.DataFrame]:
+    """The merge record and its two tables, after checking they are unchanged (whole files);
+    ``columns`` limits what is read into memory (the analysis), the gates read everything."""
     merged = Path(run_dir) / "merged"
     record = read_json(merged / "merge.json")
     body = {k: v for k, v in record.items() if k not in ("result_sha256", "created_at_utc", "merge_code_commit")}
@@ -55,7 +56,8 @@ def load_merged(run_dir: Path) -> tuple[dict, pd.DataFrame, pd.DataFrame]:
     for entry in record["files"].values():
         if sha256_file(merged / entry["file"]) != entry["sha256"]:
             raise StageError(f"merged/{entry['file']} changed since the merge")
-    return record, pd.read_parquet(merged / "rows.parquet"), pd.read_parquet(merged / "failed_rows.parquet")
+    return (record, pd.read_parquet(merged / "rows.parquet", columns=columns),
+            pd.read_parquet(merged / "failed_rows.parquet", columns=columns))
 
 
 def _key_frame(df: pd.DataFrame, keys: list[str]) -> pd.DataFrame:
