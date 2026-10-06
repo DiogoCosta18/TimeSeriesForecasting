@@ -114,6 +114,8 @@ out = {"prepare": "prepare/bundle.json", "tune": f"tune/{shard}/tasks/x.json", "
 time.sleep(0.2)
 (run / out).parent.mkdir(parents=True, exist_ok=True)
 (run / out).write_text(f"{stage} {shard}")
+if stage == "evaluate":                  # a temporary left by an interrupted atomic write
+    (run / out).with_name(".y.parquet.tmp").write_text("partial")
 '''
 
 MACHINES = {  # the full run's allocation in miniature: the lead tunes and evaluates the CPU shards
@@ -165,6 +167,8 @@ def test_machines_run_the_stages_in_order_through_the_bucket(tmp_path, env):
         ("evaluate", "ml-quarterly", "2"), ("evaluate", "statistical-monthly", "4"), ("evaluate", "statistical-quarterly", "4")}
     assert all((tmp_path / f"done_{m}").exists() for m in MACHINES)          # ON_DONE after success
     assert (remote / "analysis" / "analysis.json").exists() and (remote / "coordination" / "analyse.done.json").exists()
+    assert not list(remote.rglob("*.tmp"))                                    # temporaries never uploaded
+    assert not any("--filter is recommended" in o for o in out.values())      # ordered filter rules only
     for m in ("A", "B"):                                                      # what the others fetched
         run = tmp_path / f"machine_{m}" / "full_run"
         assert (run / "prepare" / "bundle.json").exists() and (run / "configs_frozen.json").exists()

@@ -79,8 +79,11 @@ mark() {  # mark STEP STATUS: coordination/STEP.STATUS.json, here and in the buc
 }
 
 publish() {  # publish PATH...: copy run paths to the bucket, then check every file against it
-  local filters=(--exclude ".*.tmp") p
-  for p in "$@"; do filters+=(--include "/$p" --include "/$p/**"); done
+  # Ordered rules, the first match wins: never temporaries of atomic writes, then the paths,
+  # nothing else (rclone puts all --include rules before any --exclude, so they cannot be mixed).
+  local filters=(--filter "- .*.tmp") p
+  for p in "$@"; do filters+=(--filter "+ /$p" --filter "+ /$p/**"); done
+  filters+=(--filter "- **")
   retry "$RCLONE" copy "$RUN" "$DEST" --checksum "${filters[@]}" --log-level NOTICE
   retry "$RCLONE" check "$RUN" "$DEST" --checksum --one-way "${filters[@]}" --log-level NOTICE
 }
