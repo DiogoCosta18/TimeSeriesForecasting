@@ -15,7 +15,7 @@ from src.forecast.registry import FAMILIES, GLOBAL_MODELS, LINEARITY, STRATEGIES
 
 STRATEGY_LABEL = {"direct": "Direct", "stl_sn": "STL-SN", "stl_ac": "STL-AC"}
 COLORS = {"direct": "#4C72B0", "stl_sn": "#DD8452", "stl_ac": "#55A868"}
-LABEL_MARK = {"gain": "+", "loss": "−", "negligible": "≈", "no evidence": ""}
+LABEL_TEXT = {"gain": "gain", "loss": "loss", "negligible": "negl.", "no evidence": "n.e."}
 
 
 def _save(fig, path: Path) -> None:
@@ -136,13 +136,18 @@ def _bars(table: pd.DataFrame, path: Path, families: list[str], strategies: list
                    label=STRATEGY_LABEL[strategy] if i == 0 else None)
             ax.errorbar(x, row["median"], yerr=[[row["median"] - row["ci_low"]], [row["ci_high"] - row["median"]]], color="black",
                         capsize=2, lw=0.8)
-            ax.text(x, row["ci_high"], LABEL_MARK.get(row["label"], ""), ha="center", va="bottom", fontsize=9)
+            # the D26 label sits beyond the end of the interval, away from zero, so it cannot be read as a cap
+            below = row["median"] < 0
+            ax.annotate(LABEL_TEXT.get(row["label"], ""), (x, row["ci_low"] if below else row["ci_high"]),
+                        xytext=(0, -3 if below else 3), textcoords="offset points", ha="center",
+                        va="top" if below else "bottom", fontsize=7)
     ax.axhline(0, color="black", lw=0.6)
+    ax.margins(y=0.12)
     ax.set_xticks(range(len(families)), families)
     ax.set_ylabel(ylabel)
     ax.legend(fontsize=7)
     if table["label"].astype(str).str.len().any():
-        ax.text(1.0, -0.12, "D26: + gain, − loss, ≈ negligible, none: no evidence", transform=ax.transAxes,
+        ax.text(1.0, -0.12, "D26 label: gain, loss, negl. = negligible, n.e. = no evidence", transform=ax.transAxes,
                 ha="right", fontsize=6)
     _save(fig, path)
 
@@ -184,17 +189,27 @@ def mcm(h3: pd.DataFrame, path: Path) -> None:
 
 
 def stl_feature_tercile(pooled: pd.DataFrame, path: Path) -> None:
+    """Median per-series ΔSTL by feature tercile: one column per feature, one row per strategy;
+    a tercile without series (a degenerate feature, D7) is marked "empty", not drawn as zero."""
     features = sorted(pooled["feature_name"].astype(str).unique())
-    fig, axes = plt.subplots(2, len(features), figsize=(2.6 * len(features), 5), squeeze=False, sharey="row")
+    fig, axes = plt.subplots(2, len(features), figsize=(2.6 * len(features), 5), squeeze=False, sharey="row",
+                             layout="constrained")
     for i, strategy in enumerate(["stl_sn", "stl_ac"]):
         for j, feature in enumerate(features):
             ax = axes[i, j]
             sub = pooled[(pooled["feature_name"] == feature) & (pooled["strategy"] == strategy)]
-            sub = sub.set_index(sub["bucket"].astype(str)).reindex(["Low", "Medium", "High"])
-            ax.bar(range(3), sub["median_per_series"], color=COLORS[strategy])
+            values = sub.set_index(sub["bucket"].astype(str)).reindex(["Low", "Medium", "High"])["median_per_series"]
+            ax.bar(range(3), values.fillna(0.0), color=COLORS[strategy])
+            for x, v in enumerate(values):
+                if pd.isna(v):
+                    ax.text(x, 0, "empty", ha="center", va="bottom", fontsize=6, color="gray")
             ax.axhline(0, color="black", lw=0.6)
-            ax.set_xticks(range(3), ["L", "M", "H"], fontsize=7)
-            ax.set_title(f"{feature.replace('feature_', '')}\n{STRATEGY_LABEL[strategy]}", fontsize=7)
+            ax.set_xticks(range(3), ["Low", "Med", "High"], fontsize=7)
+            ax.tick_params(axis="y", labelsize=7)
+            if i == 0:
+                ax.set_title(feature.replace("feature_", "").replace("_", " "), fontsize=8)
+            if j == 0:
+                ax.set_ylabel(f"{STRATEGY_LABEL[strategy]}\nmedian per-series ΔSTL", fontsize=8)
     _save(fig, path)
 
 
