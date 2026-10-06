@@ -1,4 +1,4 @@
-"""Output gates G1-G13 (protocol Section 7.4).
+"""Output gates G1-G13 (protocol Section 7.3).
 
 ``run_gates`` checks the merged result bundle together with the prepare bundle and the
 frozen configurations, and writes ``merged/gates.json``: for every gate whether it

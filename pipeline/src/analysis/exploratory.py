@@ -1,6 +1,6 @@
 """Exploratory analyses of a gated run: NOT pre-registered.
 
-The confirmatory plan is protocol Section 7 (H1-H7, A1-A15, Table 6); nothing here tests a
+The confirmatory plan is protocol Section 5 (H1-H7, A1-A15, Table 8); nothing here tests a
 hypothesis or changes a label of that plan. These analyses answer questions the earlier paper
 raised, on the same gated instances and with the same aggregation rules (D27: a series' value
 is its mean over the instances of a group; cohort scope, main seed):
@@ -29,7 +29,7 @@ from src.analysis.data import PRIMARY, AnalysisError, load_gated
 from src.forecast.registry import FAMILIES, STRATEGIES
 from src.stages.io import code_commit, sha256_json, utc_now, write_json
 
-STATUS = "exploratory: not pre-registered (protocol Section 7 is the confirmatory plan)"
+STATUS = "exploratory: not pre-registered (protocol Section 5 is the confirmatory plan)"
 RULE_FEATURE = "feature_evolving_seasonality"
 FAMILY_ORDER = {f: i for i, f in enumerate(FAMILIES)}
 

@@ -1,4 +1,4 @@
-"""Figures of the analysis (protocol Table 6). Each function draws from analysis tables only
+"""Figures of the analysis (protocol Table 8). Each function draws from analysis tables only
 and writes one PNG; nothing is recomputed here."""
 from __future__ import annotations
 
