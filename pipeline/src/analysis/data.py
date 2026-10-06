@@ -35,6 +35,10 @@ VALUES = METRICS + ["fit_seconds", "predict_seconds"]
 STL_KEYS = ["feature_name", "frequency", "unique_id", "source_dataset", "window", "family", "model", "scope", "bucket", "seed_key"]
 FT_KEYS = ["feature_name", "frequency", "unique_id", "source_dataset", "window", "family", "model", "strategy", "bucket", "seed_key"]
 PRIMARY = "relnaive_capped"
+# the merged-row columns the analysis reads; forecast hashes, components and provenance hashes are
+# checked by the merge and the gates, and leaving them out lets the analysis run in a few GB
+ROW_COLUMNS = ["task_id", *[k for k in STL_KEYS if k != "seed_key"], "strategy", "seed", "status", *VALUES,
+               "failure", "backend_version"]
 
 
 class AnalysisError(StageError):
@@ -87,7 +91,7 @@ def build_instances(rows: pd.DataFrame, failed: pd.DataFrame, buckets: pd.DataFr
 
 def load_gated(run_dir: Path, manifest_path: Path = DEFAULT_MANIFEST) -> AnalysisData:
     run_dir = Path(run_dir)
-    record, rows, failed = load_merged(run_dir)
+    record, rows, failed = load_merged(run_dir, ROW_COLUMNS)
     gates_path = run_dir / "merged" / "gates.json"
     if not gates_path.exists():
         raise AnalysisError("the gates have not been run on this bundle")
