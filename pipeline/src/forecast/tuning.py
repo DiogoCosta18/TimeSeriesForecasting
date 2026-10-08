@@ -51,7 +51,8 @@ def study_seed(base_seed: int, model: str, frequency: str, target: str) -> int:
     return int(ss.generate_state(1)[0])
 
 
-def tuning_frame(data: pd.DataFrame, tuning_set: pd.DataFrame, frequency: str, target: str, season_length: int) -> pd.DataFrame:
+def tuning_frame(data: pd.DataFrame, tuning_set: pd.DataFrame, frequency: str, target: str, season_length: int,
+                 stl_variant: str = "default") -> pd.DataFrame:
     """unique_id, ds (= position t), y (= target) of every tuning series of ``frequency``,
     truncated at its first cutoff (``tuning_validation_end_t`` of the prepare bundle)."""
     rows = tuning_set[tuning_set["frequency"] == frequency]
@@ -64,7 +65,7 @@ def tuning_frame(data: pd.DataFrame, tuning_set: pd.DataFrame, frequency: str, t
         y = g["y"].to_numpy(dtype=float)[: end[uid]]
         if len(y) != end[uid]:
             raise TuningError(f"{uid}: {len(y)} points, expected {end[uid]} before the first cutoff")
-        values = y if target == "raw" else component_targets(y, season_length)[target]
+        values = y if target == "raw" else component_targets(y, season_length, stl_variant)[target]
         parts.append(pd.DataFrame({"unique_id": uid, "ds": np.arange(1, len(y) + 1, dtype="int64"), "y": values}))
     if len(parts) != len(end):
         raise TuningError(f"{len(end) - len(parts)} tuning series are missing from the data")
