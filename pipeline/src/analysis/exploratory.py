@@ -15,14 +15,26 @@ is its mean over the instances of a group; cohort scope, main seed):
   estimate needs out-of-sample selection.
 - E3 POCID: mean and median RelNaive and mean POCID per model and strategy (the earlier
   paper's RelNaive-POCID trade-off).
+- E4 honest oracle: the strategy of each series and model chosen on every window but the last
+  and judged on the last, beside the in-sample oracle of the last window: how much of E1 a
+  choice from a series' own past keeps.
+- E5 feature cells: per family and STL strategy, the median per-series STL delta in each
+  tercile of one feature and in each pair of terciles of two features (terciles cut as the
+  prepare bundle cuts them). Hundreds of cells are scanned on the same data: hypotheses for a
+  later study, not findings.
+- E6 Ridge: the ML family's per-series STL deltas with all four models, without Ridge and
+  without LinearRegression (Ridge's tuned penalty is negligible at the data's scale, change
+  log v2.1).
 
     python -m src.analysis.exploratory --run RUN --out OUT
 """
 from __future__ import annotations
 
 import argparse
+from itertools import combinations
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 
 from src.analysis.data import PRIMARY, AnalysisError, load_gated
@@ -90,6 +102,91 @@ def feature_rule(table: pd.DataFrame, features: pd.DataFrame, bucket_summary: pd
     return pd.DataFrame(rows).sort_values("family", key=lambda s: s.map(FAMILY_ORDER)).reset_index(drop=True)
 
 
+def series_by_window(inst: pd.DataFrame, metric: str = PRIMARY) -> pd.DataFrame:
+    """One row per (series, model, window) with its mean metric under each strategy over the
+    feature samples (cohort scope, main seed); rows missing a strategy are dropped."""
+    cohort = inst[(inst["scope"].astype(str) == "cohort") & inst["main_seed"]]
+    keys = ["unique_id", "frequency", "family", "model", "window"]
+    means = (cohort.dropna(subset=[metric]).astype({k: str for k in keys[:-1] + ["strategy"]})
+             .groupby(keys + ["strategy"], sort=True)[metric].mean().unstack("strategy"))
+    return means.reindex(columns=STRATEGIES).dropna().reset_index()
+
+
+def honest_oracle(window_table: pd.DataFrame) -> pd.DataFrame:
+    """E4. Choose each (series, model)'s strategy on every window but the last (ties go to the
+    simpler strategy), judge it on the last; beside it the in-sample oracle of the last window."""
+    keys = ["unique_id", "frequency", "family", "model"]
+    last = window_table["window"].max()
+    select = window_table[window_table["window"] < last].groupby(keys)[STRATEGIES].mean()
+    judge = window_table[window_table["window"] == last].set_index(keys)[STRATEGIES]
+    j = select.join(judge, lsuffix="_select", how="inner")
+    choice = j[[f"{s}_select" for s in STRATEGIES]].to_numpy().argmin(axis=1)
+    test = j[STRATEGIES].to_numpy()
+    j = j.assign(chose_stl=choice > 0, honest=test[:, 0] - test[np.arange(len(test)), choice],
+                 oracle_last=test[:, 0] - test.min(axis=1)).reset_index()
+    rows = []
+    for fam, g in j.groupby("family"):
+        ps = g.groupby("unique_id")[["chose_stl", "honest", "oracle_last"]].mean()
+        rows.append({"family": fam, "n_series": int(len(ps)), "selection_windows": int(last),
+                     "share_chose_stl": float(ps["chose_stl"].mean()),
+                     "honest_median": float(ps["honest"].median()), "honest_mean": float(ps["honest"].mean()),
+                     "honest_share_improved": float((ps["honest"] > 0).mean()),
+                     "honest_share_worse": float((ps["honest"] < 0).mean()),
+                     "oracle_last_median": float(ps["oracle_last"].median()), "oracle_last_mean": float(ps["oracle_last"].mean())})
+    return pd.DataFrame(rows).sort_values("family", key=lambda c: c.map(FAMILY_ORDER)).reset_index(drop=True)
+
+
+def _terciles(features: pd.DataFrame, bucket_summary: pd.DataFrame) -> pd.DataFrame:
+    """Each eligible series' tercile (Low / Medium / High) of every feature, cut as the prepare
+    bundle cuts it (value <= first cut: Low; <= second cut: Medium)."""
+    names = [c for c in features.columns if c.startswith("feature_")]
+    f = features[features["eligible"]][["unique_id", "frequency", *names]].copy()
+    for name in names:
+        cuts = bucket_summary[bucket_summary["feature_name"] == name].set_index("frequency")
+        c1, c2 = f["frequency"].map(cuts["tercile_cut_1"]), f["frequency"].map(cuts["tercile_cut_2"])
+        f[name] = np.select([f[name] <= c1, f[name] <= c2], ["Low", "Medium"], "High")
+    return f
+
+
+def feature_cells(table: pd.DataFrame, features: pd.DataFrame,
+                  bucket_summary: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """E5. Median per-series STL delta per family and strategy in each feature tercile (one
+    feature) and each pair of terciles (two features); a family's value is its models' mean."""
+    t = table.assign(stl_sn=table["direct"] - table["stl_sn"], stl_ac=table["direct"] - table["stl_ac"])
+    fam = t.groupby(["unique_id", "frequency", "family"])[["stl_sn", "stl_ac"]].mean().reset_index()
+    terc = _terciles(features, bucket_summary)
+    names = [c for c in terc.columns if c.startswith("feature_")]
+    fs = fam.merge(terc, on=["unique_id", "frequency"], how="left")
+    if fs[names].isna().any().any():
+        raise AnalysisError("series without feature terciles")
+
+    def cells(by):
+        long = fs.melt(id_vars=["unique_id", "family", *by], value_vars=["stl_sn", "stl_ac"],
+                       var_name="strategy", value_name="delta")
+        return (long.groupby(["family", "strategy", *by])["delta"]
+                .agg(n_series="size", median="median", share_positive=lambda x: float((x > 0).mean())).reset_index())
+
+    single = pd.concat([cells([n]).rename(columns={n: "tercile"}).assign(feature=n[8:]) for n in names], ignore_index=True)
+    pairs = pd.concat([cells([a, b]).rename(columns={a: "tercile_a", b: "tercile_b"}).assign(feature_a=a[8:], feature_b=b[8:])
+                       for a, b in combinations(names, 2)], ignore_index=True)
+    return (single.sort_values("median", ascending=False).reset_index(drop=True),
+            pairs.sort_values("median", ascending=False).reset_index(drop=True))
+
+
+def ridge_sensitivity(table: pd.DataFrame) -> pd.DataFrame:
+    """E6. The ML family's per-series STL deltas with all four models, without Ridge and
+    without LinearRegression."""
+    ml = table[table["family"] == "ml"]
+    ml = ml.assign(stl_sn=ml["direct"] - ml["stl_sn"], stl_ac=ml["direct"] - ml["stl_ac"])
+    rows = []
+    for label, drop in (("all four models", None), ("without Ridge", "Ridge"), ("without LinearRegression", "LinearRegression")):
+        sub = ml if drop is None else ml[ml["model"] != drop]
+        ps = sub.groupby("unique_id")[["stl_sn", "stl_ac"]].mean()
+        rows.append({"ml_family": label, "models": int(sub["model"].nunique()), "n_series": int(len(ps)),
+                     **{f"{s}_{stat}": float(getattr(ps[s], stat)()) for s in ("stl_sn", "stl_ac") for stat in ("median", "mean")}})
+    return pd.DataFrame(rows)
+
+
 def pocid_table(inst: pd.DataFrame) -> pd.DataFrame:
     """E3. Per model and strategy (cohort scope, main seed): mean and median RelNaive (capped),
     mean POCID (share of correctly predicted directions)."""
@@ -130,11 +227,16 @@ def run_exploratory(run_dir: Path, out: Path) -> dict:
     data = load_gated(run_dir)
     table = series_by_strategy(data.main)
     by_family, by_model = oracle(table)
+    single, pairs = feature_cells(table, data.tables["features"], data.tables["bucket_summary"])
     outputs = {
         "e1_oracle_by_family": by_family,
         "e1_oracle_by_model": by_model,
         "e2_evolving_seasonality_rule": feature_rule(table, data.tables["features"], data.tables["bucket_summary"]),
         "e3_pocid": pocid_table(data.main),
+        "e4_honest_oracle": honest_oracle(series_by_window(data.main)),
+        "e5_feature_single": single,
+        "e5_feature_pairs": pairs,
+        "e6_ridge": ridge_sensitivity(table),
     }
     (out / "tables").mkdir(parents=True)
     for name, df in outputs.items():
