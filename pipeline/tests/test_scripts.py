@@ -196,3 +196,53 @@ def test_run_machine_knows_every_shard_of_the_protocol():
     evaluate = re.search(r'^EVALUATE_SHARDS_ALL="([^"]+)"', text, re.M).group(1).replace("$TUNE_SHARDS_ALL", " ".join(tune)).split()
     assert sorted(tune) == sorted({t.shard for t in tuning_tasks()})
     assert sorted(evaluate) == sorted(f"{f}-{q}" for f in FAMILIES for q in ("monthly", "quarterly"))
+
+
+# --- run_s1.sh: sensitivity analysis S1 on one machine ----------------------------------------------
+
+FAKE_S1 = '''
+import os, sys, time
+args = sys.argv[3:]                      # python -m src.stages.sensitivity STAGE ...
+stage, opts = args[0], dict(zip(args[1::2], args[2::2]))
+with open(os.environ["CALLS"], "a") as f:
+    f.write(f"{time.time_ns()} {stage} {opts.get('--group', '-')} {opts.get('--workers', '-')}" + chr(10))
+time.sleep(0.2)
+if os.environ.get("FAIL") == f"{stage}-{opts.get('--group')}":
+    sys.exit("boom")
+'''
+
+
+def _run_s1(tmp_path, env, fail=None):
+    environ, bucket = env
+    fake = tmp_path / "fake_s1.py"
+    fake.write_text(FAKE_S1, encoding="utf-8")
+    python = tmp_path / "python"
+    python.write_text(f"#!/bin/bash\nexec {shutil.which('python3') or 'python3'} {fake} \"$@\"\n", encoding="utf-8")
+    python.chmod(0o755)
+    calls = tmp_path / "calls.txt"
+    run = tmp_path / "full_run"
+    run.mkdir()
+    machine_env = {**environ, "PYTHON": str(python), "CALLS": str(calls), "ON_DONE": f"touch {tmp_path / 'done'}",
+                   **({"FAIL": fail} if fail else {})}
+    res = subprocess.run(["bash", str(SCRIPTS / "run_s1.sh"), "configs/rerun_v2.yaml", str(run), str(tmp_path / "data")],
+                         env=machine_env, capture_output=True, text=True, cwd=SCRIPTS.parent, timeout=300)
+    rows = [line.split(" ") for line in calls.read_text().splitlines()] if calls.exists() else []
+    return res, [(int(t), stage, group, workers) for t, stage, group, workers in rows], run, bucket / "runs" / "full_run"
+
+
+def test_run_s1_orders_the_stages_and_stops_the_machine_after_success(tmp_path, env):
+    res, calls, run, remote = _run_s1(tmp_path, env)
+    assert res.returncode == 0, res.stdout + res.stderr
+    stages = {(stage, group, workers) for _, stage, group, workers in calls}
+    assert stages == {("tune", "cpu", "-"), ("tune", "gpu", "-"), ("freeze", "-", "-"), ("evaluate", "cpu", "8"), ("evaluate", "gpu", "-")}
+    time_of = {(s, g): t for t, s, g, _ in calls}
+    assert max(time_of[("tune", "cpu")], time_of[("tune", "gpu")]) < time_of[("freeze", "-")]
+    assert time_of[("freeze", "-")] < min(time_of[("evaluate", "cpu")], time_of[("evaluate", "gpu")])
+    assert (tmp_path / "done").exists() and "last upload checked" in res.stdout
+    assert (remote / "logs" / "s1-evaluate-gpu.log").exists()               # uploaded with the run
+
+
+def test_run_s1_failure_keeps_the_machine_up(tmp_path, env):
+    res, calls, run, _ = _run_s1(tmp_path, env, fail="evaluate-gpu")
+    assert res.returncode != 0 and not (tmp_path / "done").exists()
+    assert "exit 1" in (run / "logs" / "s1-evaluate-gpu.log").read_text()
