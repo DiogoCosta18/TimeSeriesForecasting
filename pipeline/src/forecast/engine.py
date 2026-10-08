@@ -101,6 +101,8 @@ def evaluate_global_task(task: dict, series: pd.DataFrame, cutoffs: pd.DataFrame
     if family(model) == "statistical":
         raise ValueError("statistical models are evaluated per series (evaluate_statistical_series)")
     variant = _variant(strategy, task.get("stl_variant", "default"))
+    if variant == "stlf":
+        raise ValueError("the stlf variant is defined for statistical models only (change log v2.4)")
     keys = {"feature_name": task["feature_name"], "frequency": frequency, "strategy": strategy,
             "family": family(model), "model": model, "scope": task["scope"], "seed": seed,
             **({} if variant == "default" else {"stl_variant": variant})}
@@ -147,7 +149,7 @@ def evaluate_global_task(task: dict, series: pd.DataFrame, cutoffs: pd.DataFrame
 
 
 def _variant(strategy: str, variant: str) -> str:
-    """The STL variant of a task: the run's STL, or one of sensitivity analysis S1 (STL-SN only)."""
+    """The STL variant of a task: the run's STL, or one of sensitivity analyses S1 and S2 (STL-SN only)."""
     if variant != "default" and strategy != "stl_sn":
         raise ValueError(f"STL variant {variant!r} is defined for STL-SN only (change log v2.2)")
     return variant
@@ -155,12 +157,17 @@ def _variant(strategy: str, variant: str) -> str:
 
 def _statistical_window(model: str, strategy: str, y_train, h: int, m: int,
                         variant: str = "default") -> tuple[np.ndarray, list[dict], dict]:
+    """``stlf`` (S2, change log v2.4): the model is fitted on T + R without a seasonal component
+    (season length 1), as R's stlf does; STL, the continuation and the metrics keep m."""
     timing = {"fit_seconds": 0.0, "predict_seconds": 0.0}
+    if variant == "stlf" and model == "SARIMA":
+        raise ValueError("SARIMA has no non-seasonal form; the stlf variant is for ETS and ARIMA")
+    fit_m = 1 if variant == "stlf" else m
     targets = {"raw": np.asarray(y_train, dtype=float)} if strategy == "direct" else component_targets(y_train, m, variant)
     results = {}
     for target in STRATEGY_TARGETS[strategy]:
         clock = {}
-        results[target] = models.forecast_statistical(model, targets[target], h, m, timings=clock)
+        results[target] = models.forecast_statistical(model, targets[target], h, fit_m, timings=clock)
         timing = {k: timing[k] + clock[k] for k in timing}
     if strategy == "direct":
         yhat = results["raw"].yhat

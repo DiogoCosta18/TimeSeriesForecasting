@@ -20,13 +20,16 @@ def robust_scale(x: np.ndarray, eps: float = 1e-8) -> float:
     return float(1.4826 * mad + eps)
 
 
-def decompose_series(y, season_length: int, periodic: bool = False) -> dict[str, np.ndarray]:
+def decompose_series(y, season_length: int, periodic: bool = False, seasonal_deg: int = 1) -> dict[str, np.ndarray]:
     """Robust STL (protocol D9). No fallback: raises DecompositionError when STL cannot be fitted.
 
+    The run's STL is statsmodels' default: a seasonal smoother of span 7 and degree 1.
     ``periodic`` (sensitivity analysis S1 only, change log v2.2): as R's ``s.window = "periodic"``,
     a seasonal smoother of length 10n + 1 and degree 0 on n points, then the seasonal
     component replaced by its mean at each position of the cycle (the remainder takes the
-    difference), so the seasonal pattern is the same in every cycle."""
+    difference), so the seasonal pattern is the same in every cycle.
+    ``seasonal_deg=0`` (sensitivity analysis S2 only, change log v2.4): the run's STL with a
+    seasonal smoother of degree 0 instead of 1, the span unchanged."""
     y = finite_array(y)
     if len(y) < 2 * season_length:
         raise DecompositionError("stl_too_short")
@@ -41,6 +44,8 @@ def decompose_series(y, season_length: int, periodic: bool = False) -> dict[str,
         means = np.bincount(position, weights=np.asarray(res.seasonal)) / np.bincount(position)
         seasonal = means[position]
         return {"trend": trend, "seasonal": seasonal, "residual": y - trend - seasonal}
+    elif seasonal_deg != 1:
+        res = STL(y, period=season_length, seasonal_deg=seasonal_deg, robust=True).fit()
     else:
         res = STL(y, period=season_length, robust=True).fit()
     return {"trend": np.asarray(res.trend), "seasonal": np.asarray(res.seasonal), "residual": np.asarray(res.resid)}
