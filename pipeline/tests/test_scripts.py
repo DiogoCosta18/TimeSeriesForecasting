@@ -205,14 +205,14 @@ import os, sys, time
 args = sys.argv[3:]                      # python -m src.stages.sensitivity STAGE ...
 stage, opts = args[0], dict(zip(args[1::2], args[2::2]))
 with open(os.environ["CALLS"], "a") as f:
-    f.write(f"{time.time_ns()} {stage} {opts.get('--group', '-')} {opts.get('--workers', '-')}" + chr(10))
+    f.write(f"{time.time_ns()} {stage} {opts.get('--group', '-')} {opts.get('--workers', '-')} {sys.argv[2]}" + chr(10))
 time.sleep(0.2)
 if os.environ.get("FAIL") == f"{stage}-{opts.get('--group')}":
     sys.exit("boom")
 '''
 
 
-def _run_s1(tmp_path, env, fail=None):
+def _run_s1(tmp_path, env, fail=None, script="run_s1.sh", modules=None):
     environ, bucket = env
     fake = tmp_path / "fake_s1.py"
     fake.write_text(FAKE_S1, encoding="utf-8")
@@ -224,10 +224,12 @@ def _run_s1(tmp_path, env, fail=None):
     run.mkdir()
     machine_env = {**environ, "PYTHON": str(python), "CALLS": str(calls), "ON_DONE": f"touch {tmp_path / 'done'}",
                    **({"FAIL": fail} if fail else {})}
-    res = subprocess.run(["bash", str(SCRIPTS / "run_s1.sh"), "configs/rerun_v2.yaml", str(run), str(tmp_path / "data")],
+    res = subprocess.run(["bash", str(SCRIPTS / script), "configs/rerun_v2.yaml", str(run), str(tmp_path / "data")],
                          env=machine_env, capture_output=True, text=True, cwd=SCRIPTS.parent, timeout=300)
     rows = [line.split(" ") for line in calls.read_text().splitlines()] if calls.exists() else []
-    return res, [(int(t), stage, group, workers) for t, stage, group, workers in rows], run, bucket / "runs" / "full_run"
+    if modules is not None:
+        modules.update(module for *_, module in rows)
+    return res, [(int(t), stage, group, workers) for t, stage, group, workers, _ in rows], run, bucket / "runs" / "full_run"
 
 
 def test_run_s1_orders_the_stages_and_stops_the_machine_after_success(tmp_path, env):
@@ -246,3 +248,15 @@ def test_run_s1_failure_keeps_the_machine_up(tmp_path, env):
     res, calls, run, _ = _run_s1(tmp_path, env, fail="evaluate-gpu")
     assert res.returncode != 0 and not (tmp_path / "done").exists()
     assert "exit 1" in (run / "logs" / "s1-evaluate-gpu.log").read_text()
+
+
+def test_run_s2_runs_the_s2_module_with_its_own_logs(tmp_path, env):
+    modules = set()
+    res, calls, run, remote = _run_s1(tmp_path, env, script="run_s2.sh", modules=modules)
+    assert res.returncode == 0, res.stdout + res.stderr
+    assert modules == {"src.stages.sensitivity2"} and "S2 tuning and evaluation finished" in res.stdout
+    stages = {(stage, group, workers) for _, stage, group, workers in calls}
+    assert stages == {("tune", "cpu", "-"), ("tune", "gpu", "-"), ("freeze", "-", "-"), ("evaluate", "cpu", "8"), ("evaluate", "gpu", "-")}
+    assert sorted(p.name for p in (run / "logs").glob("*.log")) == sorted(
+        f"s2-{s}.log" for s in ("tune-cpu", "tune-gpu", "freeze", "evaluate-cpu", "evaluate-gpu"))
+    assert (tmp_path / "done").exists() and (remote / "logs" / "s2-evaluate-gpu.log").exists()

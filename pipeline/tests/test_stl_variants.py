@@ -119,7 +119,7 @@ def test_default_global_forecasts_are_bit_identical_to_the_runs_recomposition(da
         np.testing.assert_array_equal(rows.query("window == 0 and unique_id == @uid")["yhat"].iloc[0], expected)
 
 
-@pytest.mark.parametrize("variant", ["log", "periodic"])
+@pytest.mark.parametrize("variant", ["log", "periodic", "deg0", "last3"])
 def test_variant_global_rows_carry_the_variant_and_recompose(data, variant):
     df, cutoffs = data
     rows = _run(data, "stl_sn", variant)
@@ -154,6 +154,73 @@ def test_statistical_variant_rows(data):
     assert "stl_variant" not in base.columns and (log["stl_variant"] == "log").all()
     assert (log["status"] == "trained").all() and len(log) == 3
     assert not np.allclose(np.stack(base["yhat"]), np.stack(log["yhat"]))
+
+
+# --- S2 variants (change log v2.4) ------------------------------------------------------------------------
+
+def test_default_decomposition_is_statsmodels_default_stl():
+    from statsmodels.tsa.seasonal import STL
+    y = multiplicative(40, 5)
+    res = STL(y, period=M, robust=True).fit()
+    dec = decompose_series(y, M)
+    assert np.array_equal(dec["seasonal"], np.asarray(res.seasonal)) and np.array_equal(dec["trend"], np.asarray(res.trend))
+
+
+def test_deg0_changes_only_the_seasonal_degree():
+    from statsmodels.tsa.seasonal import STL
+    y = multiplicative(40, 6)
+    t = component_targets(y, M, "deg0")
+    res = STL(y, period=M, seasonal=7, seasonal_deg=0, robust=True).fit()
+    assert np.array_equal(t["seasonal"], np.asarray(res.seasonal))
+    np.testing.assert_allclose(t["trend"] + t["seasonal"] + t["residual"], y, rtol=1e-12)
+    assert not np.allclose(t["seasonal"], component_targets(y, M)["seasonal"])
+
+
+@pytest.mark.parametrize("variant", ["last3", "stlf"])
+def test_last3_and_stlf_keep_the_runs_decomposition(variant):
+    y = multiplicative(40, 7)
+    base, t = component_targets(y, M), component_targets(y, M, variant)
+    assert all(np.array_equal(base[k], t[k]) for k in base)
+
+
+def test_last3_continues_the_mean_of_the_last_three_cycles():
+    s = np.arange(4 * M, dtype=float) ** 1.5
+    expected = (s[-3 * M:-2 * M] + s[-2 * M:-M] + s[-M:]) / 3
+    np.testing.assert_allclose(seasonal_continuation(s, 6, M, cycles=3), np.r_[expected, expected[:2]])
+    assert np.array_equal(seasonal_continuation(s, 6, M), np.r_[s[-M:], s[-M:-M + 2]])        # one cycle: unchanged
+    f = np.ones(6)
+    np.testing.assert_allclose(stl_sn_forecast(f, s, 6, M, "last3"), f + seasonal_continuation(s, 6, M, 3))
+    with pytest.raises(ValueError, match="shorter than 3 seasons"):
+        seasonal_continuation(s[: 2 * M], 6, M, cycles=3)
+
+
+def test_stlf_fits_the_statistical_model_without_seasonality(data, monkeypatch):
+    df, cutoffs = data
+    seen = []
+    real = models.forecast_statistical
+
+    def spy(model, y, h, season_length, timings=None):
+        seen.append(season_length)
+        return real(model, y, h, season_length, timings=timings)
+
+    monkeypatch.setattr(models, "forecast_statistical", spy)
+    one = df[df["unique_id"] == "M4_Quarterly_Q2"]
+    for model in ("ETS", "ARIMA"):
+        rows = engine.evaluate_statistical_series(model, "quarterly", "stl_sn", one, cutoffs, H, M, PROV, stl_variant="stlf")
+        assert (rows["stl_variant"] == "stlf").all() and (rows["status"] == "trained").all() and len(rows) == 3
+    assert seen == [1] * 6
+    seen.clear()
+    engine.evaluate_statistical_series("ETS", "quarterly", "stl_sn", one, cutoffs, H, M, PROV)
+    assert seen == [M] * 3
+
+
+def test_stlf_is_refused_for_sarima_and_global_models(data):
+    df, cutoffs = data
+    one = df[df["unique_id"] == "M4_Quarterly_Q3"]
+    rows = engine.evaluate_statistical_series("SARIMA", "quarterly", "stl_sn", one, cutoffs, H, M, PROV, stl_variant="stlf")
+    assert (rows["status"] == "failed").all() and rows["failure"].str.contains("no non-seasonal form").all()
+    with pytest.raises(ValueError, match="statistical models only"):
+        _run(data, "stl_sn", "stlf")
 
 
 def test_tuning_frame_uses_the_variants_target(data):

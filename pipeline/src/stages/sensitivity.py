@@ -15,6 +15,8 @@ run's Direct forecasts (Direct is not recomputed). Everything lives in RUN/sensi
     python -m src.stages.sensitivity STAGE --config C --run RUN [--data-dir D] [--group G] [--workers N]
 
 S1 adds no confirmatory hypothesis; the paper reports it as a sensitivity analysis.
+The tune, freeze and evaluate stages take a ``Study`` (default S1); sensitivity analysis S2
+(change log v2.4, src.stages.sensitivity2) runs through them with its own tasks and directory.
 """
 from __future__ import annotations
 
@@ -24,8 +26,9 @@ import math
 import time
 import traceback
 from concurrent.futures import ProcessPoolExecutor, as_completed
-from dataclasses import asdict
+from dataclasses import asdict, dataclass
 from pathlib import Path
+from typing import Callable
 
 import numpy as np
 import pandas as pd
@@ -86,22 +89,37 @@ def eval_tasks(bucket_summary: pd.DataFrame, samples: pd.DataFrame) -> list[dict
     return tasks
 
 
+@dataclass(frozen=True)
+class Study:
+    """A sensitivity analysis run through the tune, freeze and evaluate stages of this module."""
+    name: str                                                     # "s1": logs, heartbeats, messages
+    root: str                                                     # directory inside the run
+    tune_tasks: Callable[[], list[dict]]
+    eval_tasks: Callable[[pd.DataFrame, pd.DataFrame], list[dict]]
+    frozen_format: str
+    run_entries: Callable[[Path], dict] | None = None             # entries taken from the run's frozen configurations
+
+
+S1 = Study("s1", ROOT, tune_tasks, eval_tasks, FROZEN_FORMAT)
+
+
 # --- R2 tune and freeze -----------------------------------------------------------------------------------
 
-def run_tune(run_dir: Path, config: dict, data_dir: Path, group: str, manifest_path: Path = DEFAULT_MANIFEST) -> dict:
+def run_tune(run_dir: Path, config: dict, data_dir: Path, group: str, manifest_path: Path = DEFAULT_MANIFEST,
+             study: Study = S1) -> dict:
     run_dir = Path(run_dir)
     provenance = stage_provenance(load_bundle(run_dir, config, manifest_path), manifest_path)
-    root = run_dir / ROOT / "tune"
+    root = run_dir / study.root / "tune"
     store = TaskStore(root, provenance)
-    tasks = [t for t in tune_tasks() if t["group"] == group]
+    tasks = [t for t in study.tune_tasks() if t["group"] == group]
     if not tasks:
-        raise StageError(f"no S1 tuning tasks in group {group!r}")
+        raise StageError(f"no {study.name.upper()} tuning tasks in group {group!r}")
     prepare = run_dir / "prepare"
     tuning_set = pd.read_parquet(prepare / "tuning_set.parquet")
     cutoffs = pd.read_parquet(prepare / "cutoffs.parquet")
     storage = root / f"studies_{group}.sqlite"
     failed, done = [], 0
-    with Heartbeat(root / f"heartbeat_{group}.json", "s1-tune", group) as beat:
+    with Heartbeat(root / f"heartbeat_{group}.json", f"{study.name}-tune", group) as beat:
         for frequency in FREQUENCIES:
             todo = [t for t in tasks if t["frequency"] == frequency and not store.is_done(t["task_id"], ".json")]
             done += sum(1 for t in tasks if t["frequency"] == frequency) - len(todo)
@@ -140,21 +158,21 @@ def run_tune(run_dir: Path, config: dict, data_dir: Path, group: str, manifest_p
                 done += 1
         beat.update(task=None, done=done, total=len(tasks), failed=len(failed))
     if failed:
-        raise StageError(f"{len(failed)} S1 studies failed twice: {failed}")
+        raise StageError(f"{len(failed)} {study.name.upper()} studies failed twice: {failed}")
     return {"group": group, "studies": len(tasks)}
 
 
-def run_freeze(run_dir: Path) -> str:
+def run_freeze(run_dir: Path, study: Study = S1) -> str:
     run_dir = Path(run_dir)
-    target = run_dir / ROOT / "configs_frozen.json"
+    target = run_dir / study.root / "configs_frozen.json"
     if target.exists():
         raise StageError(f"{target} exists; frozen configurations are never overwritten")
-    root = run_dir / ROOT / "tune"
+    root = run_dir / study.root / "tune"
     entries, provenances = {}, set()
-    for task in tune_tasks():
+    for task in study.tune_tasks():
         record_path = root / "tasks" / f"{task['task_id'].replace('|', '__')}.done.json"
         if not record_path.exists():
-            raise StageError(f"S1 study {task['task_id']} has not completed")
+            raise StageError(f"{study.name.upper()} study {task['task_id']} has not completed")
         record = read_json(record_path)
         output = record_path.with_name(record["file"])
         if sha256_file(output) != record["sha256"]:
@@ -162,29 +180,34 @@ def run_freeze(run_dir: Path) -> str:
         entries[entry_key(task["model"], task["frequency"], task["variant"])] = read_json(output)
         provenances.add(tuple(sorted(record["provenance"].items())))
     if len(provenances) != 1:
-        raise StageError(f"S1 studies were run with different provenance: {sorted(provenances)}")
-    body = {"format": FROZEN_FORMAT, "provenance": dict(provenances.pop()), "entries": entries}
+        raise StageError(f"{study.name.upper()} studies were run with different provenance: {sorted(provenances)}")
+    if study.run_entries is not None:
+        taken = study.run_entries(run_dir)
+        if set(taken) & set(entries):
+            raise StageError("an entry is both tuned and taken from the run")
+        entries.update(taken)
+    body = {"format": study.frozen_format, "provenance": dict(provenances.pop()), "entries": entries}
     digest = sha256_json(body)
     write_json(target, {**body, "configs_sha256": digest, "created_at_utc": utc_now()})
     return digest
 
 
-def load_frozen(run_dir: Path) -> dict:
-    record = read_json(Path(run_dir) / ROOT / "configs_frozen.json")
+def load_frozen(run_dir: Path, study: Study = S1) -> dict:
+    record = read_json(Path(run_dir) / study.root / "configs_frozen.json")
     body = {k: record[k] for k in ("format", "provenance", "entries")}
-    if record.get("format") != FROZEN_FORMAT or sha256_json(body) != record.get("configs_sha256"):
-        raise StageError("the S1 frozen configurations do not match their hash")
+    if record.get("format") != study.frozen_format or sha256_json(body) != record.get("configs_sha256"):
+        raise StageError(f"the {study.name.upper()} frozen configurations do not match their hash")
     return record
 
 
 # --- R3 evaluate -------------------------------------------------------------------------------------------
 
 def compute_task(job: dict) -> tuple[pd.DataFrame | None, list[str], float]:
-    """One S1 task's rows, failed attempts and compute seconds (main process or worker)."""
+    """One sensitivity task's rows, failed attempts and compute seconds (main process or worker)."""
     task, start = job["task"], time.perf_counter()
     if task["kind"] == "statistical":
-        rows = pd.concat([engine.evaluate_statistical_series("ETS", task["frequency"], "stl_sn", series, job["cutoffs"], job["h"],
-                                                             job["m"], job["prov"], stl_variant=task["variant"])
+        rows = pd.concat([engine.evaluate_statistical_series(task["model"], task["frequency"], "stl_sn", series, job["cutoffs"],
+                                                             job["h"], job["m"], job["prov"], stl_variant=task["variant"])
                           for series in job["series"]], ignore_index=True)
         return rows, [], time.perf_counter() - start
     attempts = []
@@ -204,25 +227,25 @@ def s1_provenance(run_dir: Path, bundle: dict, frozen: dict, manifest_path: Path
                       configs_sha256=frozen["configs_sha256"])
     for field in ("code_commit", "environment_lock_sha256", "data_manifest_sha256", "bundle_sha256"):
         if getattr(prov, field) != frozen["provenance"][field]:
-            raise StageError(f"S1 evaluation runs with the {field} its configurations were tuned with")
+            raise StageError(f"sensitivity evaluation runs with the {field} its configurations were tuned with")
     return prov
 
 
 def run_evaluate(run_dir: Path, config: dict, data_dir: Path, group: str, manifest_path: Path = DEFAULT_MANIFEST,
-                 workers: int = 1) -> dict:
+                 workers: int = 1, study: Study = S1) -> dict:
     run_dir = Path(run_dir)
     if workers > 1 and group != "cpu":
         raise StageError("--workers is for the cpu group; the gpu group trains one task at a time")
     bundle = load_bundle(run_dir, config, manifest_path)
-    frozen = load_frozen(run_dir)
+    frozen = load_frozen(run_dir, study)
     prov = s1_provenance(run_dir, bundle, frozen, manifest_path)
     prepare = run_dir / "prepare"
     samples = pd.read_parquet(prepare / "samples.parquet")
     buckets = pd.read_parquet(prepare / "buckets.parquet")
-    tasks = [t for t in eval_tasks(pd.read_parquet(prepare / "bucket_summary.parquet"), samples) if t["group"] == group]
+    tasks = [t for t in study.eval_tasks(pd.read_parquet(prepare / "bucket_summary.parquet"), samples) if t["group"] == group]
     if not tasks:
-        raise StageError(f"no S1 evaluation tasks in group {group!r}")
-    root = run_dir / ROOT / "evaluate"
+        raise StageError(f"no {study.name.upper()} evaluation tasks in group {group!r}")
+    root = run_dir / study.root / "evaluate"
     store = TaskStore(root, asdict(prov))
     cutoffs_all = pd.read_parquet(prepare / "cutoffs.parquet")
     main_seed = int(config["random_seed"])
@@ -242,7 +265,7 @@ def run_evaluate(run_dir: Path, config: dict, data_dir: Path, group: str, manife
             store.clear_failure(task["task_id"])
         beat.update(task=task["task_id"], done=finished, total=len(tasks), failed=len(failed))
 
-    with Heartbeat(root / f"heartbeat_{group}.json", "s1-evaluate", group) as beat:
+    with Heartbeat(root / f"heartbeat_{group}.json", f"{study.name}-evaluate", group) as beat:
         finished = sum(1 for t in tasks if store.is_done(t["task_id"]))
         for frequency in FREQUENCIES:
             pending = [t for t in tasks if t["frequency"] == frequency and not store.is_done(t["task_id"])]
@@ -281,15 +304,15 @@ def run_evaluate(run_dir: Path, config: dict, data_dir: Path, group: str, manife
                         finish(futures[future], *future.result())
         beat.update(task=None, done=finished, total=len(tasks), failed=len(failed))
     if failed:
-        raise StageError(f"{len(failed)} S1 tasks failed twice: {failed}")
+        raise StageError(f"{len(failed)} {study.name.upper()} tasks failed twice: {failed}")
     return {"group": group, "tasks": len(tasks)}
 
 
 # --- analyse ---------------------------------------------------------------------------------------------
 
-def _s1_rows(run_dir: Path, tasks: list[dict]) -> tuple[pd.DataFrame, dict]:
-    """The S1 rows of every completed task (hash-checked) and the facts the checks need."""
-    root = Path(run_dir) / ROOT / "evaluate"
+def _s1_rows(run_dir: Path, tasks: list[dict], root_name: str = ROOT) -> tuple[pd.DataFrame, dict]:
+    """The rows of every completed sensitivity task (hash-checked) and the facts the checks need."""
+    root = Path(run_dir) / root_name / "evaluate"
     frames, missing, changed, commits, pins, configs = [], [], [], set(), set(), set()
     for task in tasks:
         record_path = root / "tasks" / f"{task['task_id'].replace('|', '__')}.done.json"
