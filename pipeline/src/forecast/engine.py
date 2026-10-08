@@ -29,7 +29,7 @@ from src.forecast import models
 from src.forecast.metrics import row_metrics
 from src.forecast.registry import STRATEGY_TARGETS, config_key, family
 from src.forecast.result import ForecastResult, forecast_hash
-from src.forecast.targets import component_targets, seasonal_continuation
+from src.forecast.targets import component_targets, stl_sn_forecast
 from src.metrics.rel_naive import seasonal_naive_forecast
 
 METRICS = ["relnaive_capped", "relnaive", "mase", "smape", "mae", "pocid"]
@@ -100,8 +100,10 @@ def evaluate_global_task(task: dict, series: pd.DataFrame, cutoffs: pd.DataFrame
     model, frequency, strategy, seed = task["model"], task["frequency"], task["strategy"], int(task["seed"])
     if family(model) == "statistical":
         raise ValueError("statistical models are evaluated per series (evaluate_statistical_series)")
+    variant = _variant(strategy, task.get("stl_variant", "default"))
     keys = {"feature_name": task["feature_name"], "frequency": frequency, "strategy": strategy,
-            "family": family(model), "model": model, "scope": task["scope"], "seed": seed}
+            "family": family(model), "model": model, "scope": task["scope"], "seed": seed,
+            **({} if variant == "default" else {"stl_variant": variant})}
     arrays = _series_arrays(series)
     ids = sorted(arrays)
     ends = _window_ends(cutoffs, ids)
@@ -113,7 +115,7 @@ def evaluate_global_task(task: dict, series: pd.DataFrame, cutoffs: pd.DataFrame
         decomposed = {}
         for uid in ids:
             y_train = arrays[uid][1][: train_end[uid]]
-            targets = {"raw": y_train} if strategy == "direct" else component_targets(y_train, season_length)
+            targets = {"raw": y_train} if strategy == "direct" else component_targets(y_train, season_length, variant)
             decomposed[uid] = targets
             for target in entries:
                 parts[target].append(pd.DataFrame({"unique_id": uid, "ds": np.arange(1, len(y_train) + 1), "y": targets[target]}))
@@ -133,7 +135,7 @@ def evaluate_global_task(task: dict, series: pd.DataFrame, cutoffs: pd.DataFrame
             if strategy == "direct":
                 yhat = results["raw"][uid].yhat
             elif strategy == "stl_sn":
-                yhat = results["nonseasonal"][uid].yhat + seasonal_continuation(decomposed[uid]["seasonal"], h, season_length)
+                yhat = stl_sn_forecast(results["nonseasonal"][uid].yhat, decomposed[uid]["seasonal"], h, season_length, variant)
             else:
                 yhat = results["trend"][uid].yhat + results["seasonal"][uid].yhat + results["residual"][uid].yhat
             components = [_component_record(target, results[target][uid], entries[target].get("trained_steps"))
@@ -144,9 +146,17 @@ def evaluate_global_task(task: dict, series: pd.DataFrame, cutoffs: pd.DataFrame
     return pd.DataFrame(rows)
 
 
-def _statistical_window(model: str, strategy: str, y_train, h: int, m: int) -> tuple[np.ndarray, list[dict], dict]:
+def _variant(strategy: str, variant: str) -> str:
+    """The STL variant of a task: the run's STL, or one of sensitivity analysis S1 (STL-SN only)."""
+    if variant != "default" and strategy != "stl_sn":
+        raise ValueError(f"STL variant {variant!r} is defined for STL-SN only (change log v2.2)")
+    return variant
+
+
+def _statistical_window(model: str, strategy: str, y_train, h: int, m: int,
+                        variant: str = "default") -> tuple[np.ndarray, list[dict], dict]:
     timing = {"fit_seconds": 0.0, "predict_seconds": 0.0}
-    targets = {"raw": np.asarray(y_train, dtype=float)} if strategy == "direct" else component_targets(y_train, m)
+    targets = {"raw": np.asarray(y_train, dtype=float)} if strategy == "direct" else component_targets(y_train, m, variant)
     results = {}
     for target in STRATEGY_TARGETS[strategy]:
         clock = {}
@@ -155,30 +165,32 @@ def _statistical_window(model: str, strategy: str, y_train, h: int, m: int) -> t
     if strategy == "direct":
         yhat = results["raw"].yhat
     elif strategy == "stl_sn":
-        yhat = results["nonseasonal"].yhat + seasonal_continuation(targets["seasonal"], h, m)
+        yhat = stl_sn_forecast(results["nonseasonal"].yhat, targets["seasonal"], h, m, variant)
     else:
         yhat = results["trend"].yhat + results["seasonal"].yhat + results["residual"].yhat
     return yhat, [_component_record(t, r) for t, r in results.items()], timing
 
 
 def evaluate_statistical_series(model: str, frequency: str, strategy: str, series: pd.DataFrame, cutoffs: pd.DataFrame,
-                                h: int, season_length: int, provenance: Provenance) -> pd.DataFrame:
+                                h: int, season_length: int, provenance: Provenance, stl_variant: str = "default") -> pd.DataFrame:
     """All windows of one series for one statistical model and strategy (pool-independent, D18)."""
     if family(model) != "statistical":
         raise ValueError(f"{model} is not a statistical model")
+    variant = _variant(strategy, stl_variant)
     arrays = _series_arrays(series)
     if len(arrays) != 1:
         raise ValueError("evaluate_statistical_series takes exactly one series")
     (uid, (source, y)), = arrays.items()
     keys = {"feature_name": None, "frequency": frequency, "strategy": strategy, "family": "statistical",
-            "model": model, "scope": "cohort", "seed": None, "bucket": None}
+            "model": model, "scope": "cohort", "seed": None, "bucket": None,
+            **({} if variant == "default" else {"stl_variant": variant})}
     rows = []
     for window, train_end in sorted((w, e[uid]) for w, e in _window_ends(cutoffs, [uid]).items()):
         y_train, y_test = y[:train_end], y[train_end: train_end + h]
         try:
             if len(y_test) != h:
                 raise ValueError(f"window {window} has {len(y_test)} test values, expected {h}")
-            yhat, components, timing = _statistical_window(model, strategy, y_train, h, season_length)
+            yhat, components, timing = _statistical_window(model, strategy, y_train, h, season_length, variant)
         except Exception as exc:  # D16: a failed row with its reason, no forecast; the task continues
             rows.append({**keys, "unique_id": uid, "source_dataset": source, "window": window, "cutoff_t": train_end,
                          "status": "failed", "failure": f"{type(exc).__name__}: {exc}"[:500],
