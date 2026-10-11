@@ -16,6 +16,7 @@ MAX_STEPS = [500, 1000, 2000]
 BATCH_SIZE = [32, 64]
 SCALER = ["identity", "standard", "robust"]
 TARGET_TRANSFORMS = ["none", "local_standard", "first_difference", "seasonal_difference"]
+RIDGE_ALPHA = (1e-4, 1e2)  # log-uniform; penalty per training row on standardised lags (change log v2.7)
 XGBOOST_THREADS = 4  # fixed, so that results do not depend on the machine
 
 
@@ -113,7 +114,7 @@ def neural_auto_class(model: str):
 def sample_ml(model: str, trial) -> dict:
     p = {"target_transform": trial.suggest_categorical("target_transform", TARGET_TRANSFORMS)}
     if model == "Ridge":
-        p["alpha"] = trial.suggest_float("alpha", 1e-3, 1e2, log=True)
+        p["alpha"] = trial.suggest_float("alpha", *RIDGE_ALPHA, log=True)
     elif model == "RandomForest":
         p["n_estimators"] = trial.suggest_categorical("n_estimators", [100, 300])
         p["max_depth"] = trial.suggest_categorical("max_depth", ["none", 10, 20])
@@ -135,9 +136,9 @@ def ml_estimator(model: str, params: dict, seed: int):
     if family(model) != "ml":
         raise KeyError(f"{model} is not a machine-learning model")
     if model == "Ridge":
-        from sklearn.linear_model import Ridge
+        from src.forecast.ridge import ScaledRidge
 
-        return Ridge(alpha=float(params["alpha"]))
+        return ScaledRidge(alpha=float(params["alpha"]))
     if model == "LinearRegression":
         from sklearn.linear_model import LinearRegression
 
