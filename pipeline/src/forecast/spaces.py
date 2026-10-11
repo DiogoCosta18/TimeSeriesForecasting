@@ -103,12 +103,6 @@ def neural_class(model: str):
     return getattr(nf_models, model)
 
 
-def neural_auto_class(model: str):
-    from neuralforecast import auto as nf_auto
-
-    return getattr(nf_auto, f"Auto{model}")
-
-
 # --- machine-learning family (D25) ----------------------------------------------------------
 
 def sample_ml(model: str, trial) -> dict:

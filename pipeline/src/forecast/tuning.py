@@ -2,13 +2,15 @@
 
 One study per global model x frequency x target (raw, T+R, T, S, R) on the tuning set:
 every series truncated at its first cutoff; the last h points of each series form a
-single validation block (Auto classes: NeuralForecast ``val_size=h``; AutoMLForecast
-``n_windows=1, h=h``, whose splits are per series). Library Auto classes with Optuna's
-TPE sampler (seeded per study), ``num_samples`` trials, objective mean validation MASE
-with seasonality m (neural models: ``WindowMASE``, one scale per validation window, because
-the library's MASE mixes the windows of a batch; change log v2.6 (a)). Early stopping is used only here; the frozen configuration stores
-the sampled parameters and, for neural models, the number of steps the best
-configuration actually trained (read from its refit, which uses the same validation).
+single validation block (NeuralForecast ``val_size=h``; AutoMLForecast ``n_windows=1, h=h``,
+whose splits are per series). Optuna's TPE sampler (seeded per study), no pruner,
+``num_samples`` trials; every trial of every family is scored with the same objective, the mean
+validation MASE of ``utilsforecast`` with seasonality m and each series' in-sample scale over its
+training part (``_mase_loss``; for neural models change log v2.8 (c)). ML studies run in
+AutoMLForecast; neural studies in this module's own loop, with early stopping on ``WindowMASE``
+(one scale per validation window, change log v2.6 (a)). Early stopping is used only here; the
+frozen configuration stores the sampled parameters and, for neural models, the number of steps
+the best trial actually trained.
 
 Targets (change log v2.6 (b)): for STL-SN and STL-AC, STL is fitted on the training part of
 each tuning series only (positions 1 .. first cutoff - h), as in evaluation; the validation
@@ -139,39 +141,43 @@ def _any_ml_params(model: str) -> dict:
 
 def tune_neural(model: str, frame: pd.DataFrame, h: int, season_length: int, fit_seed: int, tpe_seed: int,
                 num_samples: int, early_stopping: dict) -> tuple[optuna.Study, dict, int]:
+    """One neural or transformer study (change log v2.8 (c)). Each trial trains once with the fit seed
+    and early stopping on the per-window MASE (its scale depends on input_size, which is fixed within a
+    trial), then forecasts the validation block from the end of the training part; the trial's value is
+    the validation MASE of the ML studies (``_mase_loss``). The best trial's trained steps are frozen."""
     from neuralforecast import NeuralForecast
-    from neuralforecast.common._base_auto import MockTrial
     from neuralforecast.losses.pytorch import MAE
 
     from src.forecast.neural_losses import WindowMASE
 
     device = accelerator()
+    ends = frame.groupby("unique_id")["ds"].transform("max")
+    train, valid = frame[frame["ds"] <= ends - h], frame[frame["ds"] > ends - h]
+    loss = _mase_loss(season_length)
 
-    def kwargs_for(params: dict) -> dict:
+    def objective(trial: optuna.Trial) -> float:
+        params = spaces.sample_neural(model, trial, season_length)
         kw = spaces.neural_kwargs(model, params, h, fit_seed, max_steps=params["max_steps"], accelerator=device,
                                   early_stopping=early_stopping)
-        kw.pop("h")  # the Auto class sets h itself
-        return kw
+        net = spaces.neural_class(model)(**kw, loss=MAE(), valid_loss=WindowMASE(seasonality=season_length))
+        nf = NeuralForecast(models=[net], freq=1)
+        nf.fit(frame, val_size=h)
+        steps = nf.models[0].train_trajectories
+        trained_steps = int(steps[-1][0]) + 1 if steps else 0
+        if trained_steps < 1 or trained_steps != len(steps):
+            raise TuningError(f"{model}: cannot read the trained steps of trial {trial.number} ({len(steps)} entries)")
+        trial.set_user_attr("trained_steps", trained_steps)
+        scored = valid.merge(nf.predict(df=train).rename(columns={model: "model"}), on=["unique_id", "ds"], how="left")
+        if len(scored) != len(valid) or scored["model"].isna().any():
+            raise TuningError(f"{model}: trial {trial.number} did not forecast every validation point")
+        return loss(scored, train)
 
-    def config(trial):
-        if isinstance(trial, MockTrial):  # neuralforecast reads only the keys of this first call
-            probe = optuna.create_study(sampler=optuna.samplers.RandomSampler(seed=0)).ask()
-            return {k: None for k in kwargs_for(spaces.sample_neural(model, probe, season_length))}
-        return kwargs_for(spaces.sample_neural(model, trial, season_length))
-
-    auto = spaces.neural_auto_class(model)(
-        h=h, loss=MAE(), valid_loss=WindowMASE(seasonality=season_length), config=config,
-        search_alg=optuna.samplers.TPESampler(seed=tpe_seed), num_samples=num_samples, backend="optuna",
-    )
-    nf = NeuralForecast(models=[auto], freq=1)
-    nf.fit(frame, val_size=h)
-    fitted = nf.models[0]
-    study = fitted.results
-    steps = fitted.model.train_trajectories
-    trained_steps = int(steps[-1][0]) + 1 if steps else 0
-    if trained_steps < 1 or trained_steps != len(steps):
-        raise TuningError(f"{model}: cannot read the trained steps of the best configuration ({len(steps)} entries)")
-    return study, dict(study.best_trial.params), trained_steps
+    # No pruner: every trial trains to its own early stop and is archived with its value (as the ML studies).
+    study = optuna.create_study(direction="minimize", sampler=optuna.samplers.TPESampler(seed=tpe_seed),
+                                pruner=optuna.pruners.NopPruner())
+    study.optimize(objective, n_trials=num_samples)
+    best = study.best_trial
+    return study, dict(best.params), int(best.user_attrs["trained_steps"])
 
 
 def archived_trials(study: optuna.Study, study_name: str) -> list[optuna.trial.FrozenTrial]:
