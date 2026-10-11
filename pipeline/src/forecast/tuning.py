@@ -5,7 +5,8 @@ every series truncated at its first cutoff; the last h points of each series for
 single validation block (Auto classes: NeuralForecast ``val_size=h``; AutoMLForecast
 ``n_windows=1, h=h``, whose splits are per series). Library Auto classes with Optuna's
 TPE sampler (seeded per study), ``num_samples`` trials, objective mean validation MASE
-with seasonality m. Early stopping is used only here; the frozen configuration stores
+with seasonality m (neural models: ``WindowMASE``, one scale per validation window, because
+the library's MASE mixes the windows of a batch; change log v2.6 (a)). Early stopping is used only here; the frozen configuration stores
 the sampled parameters and, for neural models, the number of steps the best
 configuration actually trained (read from its refit, which uses the same validation).
 
@@ -113,7 +114,9 @@ def tune_neural(model: str, frame: pd.DataFrame, h: int, season_length: int, fit
                 num_samples: int, early_stopping: dict) -> tuple[optuna.Study, dict, int]:
     from neuralforecast import NeuralForecast
     from neuralforecast.common._base_auto import MockTrial
-    from neuralforecast.losses.pytorch import MAE, MASE
+    from neuralforecast.losses.pytorch import MAE
+
+    from src.forecast.neural_losses import WindowMASE
 
     device = accelerator()
 
@@ -130,7 +133,7 @@ def tune_neural(model: str, frame: pd.DataFrame, h: int, season_length: int, fit
         return kwargs_for(spaces.sample_neural(model, trial, season_length))
 
     auto = spaces.neural_auto_class(model)(
-        h=h, loss=MAE(), valid_loss=MASE(seasonality=season_length), config=config,
+        h=h, loss=MAE(), valid_loss=WindowMASE(seasonality=season_length), config=config,
         search_alg=optuna.samplers.TPESampler(seed=tpe_seed), num_samples=num_samples, backend="optuna",
     )
     nf = NeuralForecast(models=[auto], freq=1)
