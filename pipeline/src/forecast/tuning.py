@@ -10,9 +10,10 @@ the library's MASE mixes the windows of a batch; change log v2.6 (a)). Early sto
 the sampled parameters and, for neural models, the number of steps the best
 configuration actually trained (read from its refit, which uses the same validation).
 
-Targets: for STL-SN and STL-AC, STL is fitted once on each tuning series (positions
-1 .. first cutoff) and the component series are the targets; nothing after the first
-cutoff is used.
+Targets (change log v2.6 (b)): for STL-SN and STL-AC, STL is fitted on the training part of
+each tuning series only (positions 1 .. first cutoff - h), as in evaluation; the validation
+block holds the scoring target (see ``stl_tuning_target``). Nothing after the first cutoff
+is used, and no training target depends on the validation block.
 
 Every trial is archived in SQLite (JSON-safe attributes only). The frozen-configuration
 file is hashed over its content (not its creation time); evaluation refuses a file whose
@@ -32,7 +33,7 @@ import pandas as pd
 from src.forecast import spaces
 from src.forecast.models import accelerator
 from src.forecast.registry import GLOBAL_MODELS, TARGETS, config_key, family
-from src.forecast.targets import component_targets
+from src.forecast.targets import CONTINUATION_CYCLES, component_targets, seasonal_continuation
 
 FROZEN_FORMAT = "rerun-frozen-configs/1"
 FREQUENCY_CODE = {"monthly": 12, "quarterly": 4}
@@ -52,21 +53,47 @@ def study_seed(base_seed: int, model: str, frequency: str, target: str) -> int:
     return int(ss.generate_state(1)[0])
 
 
+def stl_tuning_target(y: np.ndarray, train_end: int, target: str, season_length: int,
+                      stl_variant: str = "default") -> np.ndarray:
+    """One tuning series' values of an STL target (change log v2.6 (b)).
+
+    Training part (positions 1..train_end): the component of an STL fit of the training part only,
+    as evaluation fits STL on the training window only (D9). Validation block (the last h points):
+    the scoring target. For T+R (STL-SN), y - S_hat with S_hat the seasonal continuation of the
+    training fit, so the error of a T+R forecast is the error of the recomposed forecast on y (on
+    the log scale for the log variant); for T, S and R (STL-AC), the component of an STL fit of the
+    whole tuning series, used only for scoring."""
+    h = len(y) - train_end
+    train_targets = component_targets(y[:train_end], season_length, stl_variant)
+    if target == "nonseasonal":
+        cycles = CONTINUATION_CYCLES.get(stl_variant, 1)
+        s_hat = seasonal_continuation(train_targets["seasonal"], h, season_length, cycles)
+        future = np.log(y[train_end:]) if stl_variant == "log" else y[train_end:]
+        valid = future - s_hat
+    else:
+        valid = component_targets(y, season_length, stl_variant)[target][train_end:]
+    return np.concatenate([train_targets[target], valid])
+
+
 def tuning_frame(data: pd.DataFrame, tuning_set: pd.DataFrame, frequency: str, target: str, season_length: int,
                  stl_variant: str = "default") -> pd.DataFrame:
     """unique_id, ds (= position t), y (= target) of every tuning series of ``frequency``,
-    truncated at its first cutoff (``tuning_validation_end_t`` of the prepare bundle)."""
+    truncated at its first cutoff (``tuning_validation_end_t`` of the prepare bundle); the
+    validation block is the last h points (from ``tuning_train_end_t``)."""
     rows = tuning_set[tuning_set["frequency"] == frequency]
     if rows.empty:
         raise TuningError(f"no tuning series for {frequency}")
     end = dict(zip(rows["unique_id"], rows["tuning_validation_end_t"].astype(int)))
+    train_end = dict(zip(rows["unique_id"], rows["tuning_train_end_t"].astype(int)))
     sub = data[data["unique_id"].isin(end)].sort_values(["unique_id", "t"], kind="mergesort")
     parts = []
     for uid, g in sub.groupby("unique_id", sort=True):
         y = g["y"].to_numpy(dtype=float)[: end[uid]]
         if len(y) != end[uid]:
             raise TuningError(f"{uid}: {len(y)} points, expected {end[uid]} before the first cutoff")
-        values = y if target == "raw" else component_targets(y, season_length, stl_variant)[target]
+        if not 0 < train_end[uid] < end[uid]:
+            raise TuningError(f"{uid}: training end {train_end[uid]} outside 1..{end[uid] - 1}")
+        values = y if target == "raw" else stl_tuning_target(y, train_end[uid], target, season_length, stl_variant)
         parts.append(pd.DataFrame({"unique_id": uid, "ds": np.arange(1, len(y) + 1, dtype="int64"), "y": values}))
     if len(parts) != len(end):
         raise TuningError(f"{len(end) - len(parts)} tuning series are missing from the data")
