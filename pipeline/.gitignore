@@ -10,3 +10,9 @@ outputs/*
 *.log
 *.db
 
+
+# LaTeX build files of the protocol
+*.aux
+*.out
+*.toc
+*.synctex.gz
