@@ -134,15 +134,21 @@ def confirmatory_series(main: pd.DataFrame, base_seed: int) -> dict[str, np.ndar
     return {k: v for k, v in store.items() if k.split("|")[0] in E8_FAMILIES}
 
 
-def sensitivity_series(run_dir: Path, main: pd.DataFrame, tables: dict, main_seed: int) -> dict[str, np.ndarray]:
-    """The per-series values behind the S1 and S2 tests, built as their analyses build them."""
+def sensitivity_series(run_dir: Path, main: pd.DataFrame, tables: dict,
+                       main_seed: int) -> tuple[dict[str, np.ndarray], list[str]]:
+    """The per-series values behind the S1 and S2 tests, built as their analyses build them, and the
+    analyses not run on this run (no folder at all; change log v2.8 (d)), which are skipped. One that
+    was run must be complete and unchanged."""
     samples, summary, buckets = tables["samples"], tables["bucket_summary"], tables["buckets"]
     specs = [("S1", s1mod.ROOT, s1mod.eval_tasks(summary, samples),
               [(m, v) for m in s1mod.S1_MODELS.values() for v in s1mod.VARIANTS], {"direct": "S1"}),
              ("S2", s2mod.ROOT, s2mod.eval_tasks(summary, samples), s2mod.CONTRASTS,
               {"direct": "S2-vs-direct", "stl_sn": "S2-vs-run-stl-sn"})]
-    out = {}
+    out, not_run = {}, []
     for name, root, tasks, contrasts, families in specs:
+        if not (Path(run_dir) / root).exists():
+            not_run.append(name)
+            continue
         rows, facts = s1mod._s1_rows(run_dir, tasks, root)
         if facts["missing"] or facts["changed"] or facts["listed_failures"]:
             raise AnalysisError(f"{name}: incomplete or changed task outputs")
@@ -157,7 +163,7 @@ def sensitivity_series(run_dir: Path, main: pd.DataFrame, tables: dict, main_see
             for model, variant in contrasts:
                 d = strategy_contrast(inst[inst["model"].astype(str) == model], first, f"stl_sn_{variant}")
                 out[f"{family_id}|{model}|{variant}"] = per_series(d, ["model"])["delta"].to_numpy()
-    return out
+    return out, not_run
 
 
 def e8_table(series: dict[str, np.ndarray]) -> pd.DataFrame:
@@ -452,7 +458,8 @@ def run_exploratory2(run_dir: Path, config: dict, data_dir: Path, out: Path, man
 
     strength = strength_table(config, data_dir, features, ids, manifest_path)
     d = moderator_frame(series_deltas(series_by_strategy(data.main)), strength, features, tables["bucket_summary"])
-    series = {**confirmatory_series(data.main, s0), **sensitivity_series(run_dir, data.main, tables, s0)}
+    sensitivity, not_run = sensitivity_series(run_dir, data.main, tables, s0)
+    series = {**confirmatory_series(data.main, s0), **sensitivity}
     e9_model, e9_family = average_tables(averaged_forecasts(data.record, run_dir, s0))
     outputs = {
         "e7_strength": strength,
@@ -471,6 +478,7 @@ def run_exploratory2(run_dir: Path, config: dict, data_dir: Path, out: Path, man
         df.to_csv(out / "tables" / f"{name}.csv", index=False)
     record = {"status": STATUS, "code_commit": commit, "created_at_utc": utc_now(),
               "merge_result_sha256": data.record["result_sha256"], "gates_created_at_utc": data.gates["created_at_utc"],
+              "sensitivity_not_run": not_run,
               "tables": {name: sha256_json(df.to_dict(orient="list")) for name, df in outputs.items()}}
     write_json(out / "exploratory2.json", record)
     return {"out": str(out), "tables": len(outputs), "contrasts": len(series)}
