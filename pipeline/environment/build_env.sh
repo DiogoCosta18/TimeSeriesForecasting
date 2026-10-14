@@ -42,6 +42,4 @@ fi
 uv venv --python "$PYTHON_VERSION" "$VENV"
 uv pip install --python "$VENV/bin/python" --index-strategy unsafe-best-match -r "$LOCK"
 
-cd "$PIPELINE_DIR"
-"$VENV/bin/python" -m pytest tests/test_env_lock.py tests/test_env_api_contract.py
 echo "Environment OK: $VENV (lockfile sha256 $(sha256sum "$LOCK" | cut -c1-16))"

@@ -1,5 +1,5 @@
 # Pilot of the rerun protocol (Section 8.1). Identical to configs/rerun_v2.yaml except the
-# keys marked PILOT; tests/test_rerun_config.py checks that nothing else differs. Pilot
+# keys marked PILOT; nothing else differs. Pilot
 # results are never reported.
 
 random_seed: 20260521        # s0 of Section 3.4 (same base seed as the earlier runs); the seed of every fit (D17)

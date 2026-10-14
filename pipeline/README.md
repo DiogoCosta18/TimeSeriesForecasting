@@ -1,9 +1,8 @@
 # Rerun v2 pipeline
 
-This pipeline implements the signed-off rerun protocol for the study of STL decomposition and
-feature-specialised training on M3/M4 (`docs/protocol/rerun_protocol.pdf`, version history in its
-change log). Every decision (D1–D30), test (U1–U19, I1–I5) and gate (G1–G13) cited in the code
-refers to that document.
+This pipeline implements the experimental protocol of the study of STL decomposition and
+feature-specialised training on M3/M4. The decisions (D1–D30) and gates (G1–G13) cited in the code
+refer to that protocol.
 
 Nothing in the pipeline substitutes a result. Every forecast comes from a trained model, and a
 failure is recorded as a failure, never replaced. Every output carries the code commit, the
@@ -42,9 +41,9 @@ Shards are family–frequency pairs: `statistical-`, `ml-`, `neural-` and `trans
 | tune (R2) | `tune/<shard>/`: one entry per study, `studies.sqlite` | a configuration, manifest or prepare file that differs from the bundle's |
 | freeze (R2b) | `configs_frozen.json` with its hash | a missing study; studies with different provenance; an existing file |
 | evaluate (R3) | `evaluate/<shard>/tasks/`: one parquet and completion record per task | any provenance other than the frozen configurations' (see D16 below) |
-| merge (R4) | `merged/`: rows, failed rows, `merge.json` with a result hash | changed or unknown outputs; mismatched hashes (U15); unpaired tercile rows (U14) |
+| merge (R4) | `merged/`: rows, failed rows, `merge.json` with a result hash | changed or unknown outputs; mismatched hashes; unpaired tercile rows |
 | gates | `merged/gates.json` | — (reports G1–G13) |
-| analyse (R5) | every table and figure of the protocol's Table 6, `analysis.json` | failed or stale gates; a non-empty output folder |
+| analyse (R5) | every table and figure of the analysis, `analysis.json` | failed or stale gates; a non-empty output folder |
 
 Interrupted stages resume. A finished task is skipped only if its record and output still match
 the current provenance; a task produced under other provenance stops the stage instead of being
@@ -61,40 +60,11 @@ python -m src.cli evaluate ... --shard SHARD --only TASK_ID
 
 The fix must descend from the frozen commit, and the environment, data, bundle and configurations
 must be unchanged. The rerun is entered in `evaluate/<shard>/d16_reruns.json`, the only way the
-merge accepts a second commit (G4), and the protocol's change log records it.
-
-## Machines and the bucket (D20)
-
-Outputs and logs go to the private bucket while stages run. `RERUN_BUCKET` is set on each
-machine; credentials live only in the machine's rclone configuration (remote `b2rerun`).
-
-```bash
-scripts/setup_machine.sh /workspace/data                   # tools, rclone, environment (+ I5), frozen copy verified
-scripts/run_all.sh CONFIG RUN DATA                         # every stage on one GPU machine (the pilot), synced
-scripts/sync_run.sh RUN &                                  # upload every 5 min; never deletes in the bucket
-scripts/run_stage.sh RUN evaluate-ml-monthly evaluate --config ... --run RUN --data-dir DATA --shard ml-monthly
-touch RUN/.sync_stop                                       # last upload, then rclone check; wait for it
-scripts/fetch_run.sh RUN_NAME RUN prepare configs_frozen.json   # what another machine needs
-```
-
-`run_stage.sh` keeps each stage's log in `RUN/logs/`. A machine lost mid-shard is replaced by
-fetching the run and starting the same shard again: finished tasks are skipped.
+merge accepts a second commit (G4).
 
 ## Pilot
 
-The pilot (protocol Section 8) runs the same code with `configs/pilot_v2.yaml`: two features
-(evolving seasonality and nonlinearity), 100 series per source per feature in 25 strata, a tuning
-set of 100 per source, 3 trials per study, main seed only. A test checks that nothing else differs
-from `configs/rerun_v2.yaml`. Pilot results are never reported.
-
-## Tests
-
-```bash
-python -m pytest tests -p no:cacheprovider                    # unit and stage tests (minutes)
-python -m pytest tests -p no:cacheprovider -m integration     # I1 full chain and I4 resume, real fits on CPU
-```
-
-The stage tests build a small synthetic frozen copy. Some replace the model fits with cheap
-deterministic stand-ins, so that the stages, the engine, merge, gates and analysis are tested
-end to end. The statistical procedures are checked against reference implementations and exact
-enumeration (U19).
+The pilot runs the same code with `configs/pilot_v2.yaml`: two features (evolving seasonality and
+nonlinearity), 100 series per source per feature in 25 strata, a tuning set of 100 per source,
+3 trials per study, main seed only. Nothing else differs from `configs/rerun_v2.yaml`. Pilot results
+are never reported.

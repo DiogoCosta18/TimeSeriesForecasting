@@ -3,7 +3,8 @@
 `m3m4_v1.json` identifies the frozen M3/M4 copy `m3m4-v1`: the SHA-256 of every raw
 file (the original `M3C.xls` included) and of every frozen file, content hashes, series
 counts and lengths, source provenance and the M3 cross-checks. It was written by
-`python -m src.data.freeze_data freeze` at commit `98e8368` (WSL, pinned environment).
+`python -m src.data.freeze_data freeze` at commit `fb3f520` (original hash `98e8368`;
+WSL, pinned environment).
 The pipeline reads the data only through this manifest (`src/data/frozen.py`): any
 missing or altered file stops the run.
 
@@ -31,7 +32,7 @@ export RERUN_DATA_DIR=/workspace/data/frozen_m3m4_v1   # read by the pipeline's 
 
 ## Re-creating the copy
 
-Only to audit it: check out commit `98e8368` and run, with the original `M3C.xls`
+Only to audit it: check out commit `fb3f520` and run, with the original `M3C.xls`
 downloaded in a browser from the International Institute of Forecasters (the site
 refuses scripted downloads; the file is refused unless its SHA-256 is `23bfbba2...`):
 

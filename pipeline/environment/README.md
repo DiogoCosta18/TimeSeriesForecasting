@@ -2,8 +2,7 @@
 
 Every experiment in the rerun runs in one environment: **Python 3.11.10 on Linux
 x86_64**, with the exact package versions in `requirements-lock-linux-cu121.txt`.
-Results record the SHA-256 of that lockfile, and `tests/test_env_lock.py` fails if
-the running environment differs from it in any package.
+Results record the SHA-256 of that lockfile.
 
 ## Files
 
@@ -11,7 +10,7 @@ the running environment differs from it in any package.
 |---|---|
 | `requirements-pinned.in` | Human-edited input: every direct and indirect dependency at an exact version, with the reason for each deviation from the source. |
 | `requirements-lock-linux-cu121.txt` | Resolver output for the run platform (Linux, glibc 2.35+, Python 3.11, CUDA 12.1 build of torch). **This is what gets installed.** |
-| `build_env.sh` | Builds the environment from the lock and runs the environment tests. Used on vast.ai and in WSL. |
+| `build_env.sh` | Builds the environment from the lock. Used on vast.ai and in WSL. |
 
 ## Where the versions come from
 
@@ -41,8 +40,7 @@ bash pipeline/environment/build_env.sh            # default: ~/venvs/rerun-v2
 ```
 
 The script installs the pinned `uv` (0.9.30) if needed, installs Python 3.11.10,
-creates a fresh virtual environment, installs the lock, and runs
-`tests/test_env_lock.py` and `tests/test_env_api_contract.py` (protocol test I5).
+creates a fresh virtual environment and installs the lock.
 It stops with a non-zero exit code if anything fails.
 
 From Windows, run it inside WSL with Git Bash path conversion disabled:
@@ -54,7 +52,7 @@ MSYS_NO_PATHCONV=1 wsl.exe -d Ubuntu-24.04 -- bash /mnt/c/<path-to-repo>/pipelin
 **Native Windows cannot reproduce this environment.** On Windows with Python
 below 3.12, `statsforecast 2.0.3` requires `numba < 0.60`, which in turn forces
 numpy 1.x, while the lock (Linux) has numba 0.65.1 and numpy 2.4.6. Any local
-development and testing therefore happens in WSL, in the same environment the
+development therefore happens in WSL, in the same environment the
 runs use.
 
 ## Regenerate the lock
