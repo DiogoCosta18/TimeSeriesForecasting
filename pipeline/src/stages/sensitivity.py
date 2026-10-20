@@ -91,16 +91,30 @@ def eval_tasks(bucket_summary: pd.DataFrame, samples: pd.DataFrame) -> list[dict
 
 @dataclass(frozen=True)
 class Study:
-    """A sensitivity analysis run through the tune, freeze and evaluate stages of this module."""
+    """A sensitivity analysis run through the tune, freeze and evaluate stages of this module.
+
+    An evaluation task is a dict with ``task_id``, ``kind`` (global | statistical), ``group``,
+    ``frequency``, ``model``, ``variant`` and, for a global task, ``feature_name``; it may also name
+    its ``strategy`` (default STL-SN) and, for a global task, its ``scope`` (default cohort). A study
+    whose global tasks train on other pools or with other entries than S1's provides ``members``
+    (task, samples, buckets, main seed -> the pool's series and each series' bucket) and ``entries``
+    (task, frozen configurations -> {config_key: entry} for the targets of the task's strategy)."""
     name: str                                                     # "s1": logs, heartbeats, messages
     root: str                                                     # directory inside the run
     tune_tasks: Callable[[], list[dict]]
     eval_tasks: Callable[[pd.DataFrame, pd.DataFrame], list[dict]]
     frozen_format: str
     run_entries: Callable[[Path], dict] | None = None             # entries taken from the run's frozen configurations
+    members: Callable[[dict, pd.DataFrame, pd.DataFrame, int], tuple[list[str], dict[str, str]]] | None = None
+    entries: Callable[[dict, dict], dict] | None = None
 
 
 S1 = Study("s1", ROOT, tune_tasks, eval_tasks, FROZEN_FORMAT)
+
+
+def shard_of(task: dict) -> str:
+    """The family-frequency shard of a sensitivity task, as in the run (statistical-monthly, ...)."""
+    return f"{family(task['model'])}-{task['frequency']}"
 
 
 # --- R2 tune and freeze -----------------------------------------------------------------------------------
@@ -162,13 +176,19 @@ def run_tune(run_dir: Path, config: dict, data_dir: Path, group: str, manifest_p
     return {"group": group, "studies": len(tasks)}
 
 
-def run_freeze(run_dir: Path, study: Study = S1) -> str:
+def run_freeze(run_dir: Path, study: Study = S1, config: dict | None = None, manifest_path: Path = DEFAULT_MANIFEST) -> str:
+    """Freeze a study's entries. A study without tuning (S3, S5) records the provenance of the
+    freezing stage itself, which its evaluation must then share (G4)."""
     run_dir = Path(run_dir)
     target = run_dir / study.root / "configs_frozen.json"
     if target.exists():
         raise StageError(f"{target} exists; frozen configurations are never overwritten")
     root = run_dir / study.root / "tune"
     entries, provenances = {}, set()
+    if not study.tune_tasks():
+        if config is None:
+            raise StageError(f"{study.name.upper()} has no tuning; freeze needs the configuration to record its provenance")
+        provenances.add(tuple(sorted(stage_provenance(load_bundle(run_dir, config, manifest_path), manifest_path).items())))
     for task in study.tune_tasks():
         record_path = root / "tasks" / f"{task['task_id'].replace('|', '__')}.done.json"
         if not record_path.exists():
@@ -206,7 +226,8 @@ def compute_task(job: dict) -> tuple[pd.DataFrame | None, list[str], float]:
     """One sensitivity task's rows, failed attempts and compute seconds (main process or worker)."""
     task, start = job["task"], time.perf_counter()
     if task["kind"] == "statistical":
-        rows = pd.concat([engine.evaluate_statistical_series(task["model"], task["frequency"], "stl_sn", series, job["cutoffs"],
+        strategy = task.get("strategy", "stl_sn")
+        rows = pd.concat([engine.evaluate_statistical_series(task["model"], task["frequency"], strategy, series, job["cutoffs"],
                                                              job["h"], job["m"], job["prov"], stl_variant=task["variant"])
                           for series in job["series"]], ignore_index=True)
         return rows, [], time.perf_counter() - start
@@ -232,7 +253,9 @@ def s1_provenance(run_dir: Path, bundle: dict, frozen: dict, manifest_path: Path
 
 
 def run_evaluate(run_dir: Path, config: dict, data_dir: Path, group: str, manifest_path: Path = DEFAULT_MANIFEST,
-                 workers: int = 1, study: Study = S1) -> dict:
+                 workers: int = 1, study: Study = S1, shard: str | None = None) -> dict:
+    """Evaluate a study's tasks of one group; with ``shard`` (e.g. neural-monthly), only that shard's,
+    so that several machines can share a study (each task is recorded once, wherever it ran)."""
     run_dir = Path(run_dir)
     if workers > 1 and group != "cpu":
         raise StageError("--workers is for the cpu group; the gpu group trains one task at a time")
@@ -242,9 +265,10 @@ def run_evaluate(run_dir: Path, config: dict, data_dir: Path, group: str, manife
     prepare = run_dir / "prepare"
     samples = pd.read_parquet(prepare / "samples.parquet")
     buckets = pd.read_parquet(prepare / "buckets.parquet")
-    tasks = [t for t in study.eval_tasks(pd.read_parquet(prepare / "bucket_summary.parquet"), samples) if t["group"] == group]
+    tasks = [t for t in study.eval_tasks(pd.read_parquet(prepare / "bucket_summary.parquet"), samples)
+             if t["group"] == group and (shard is None or shard_of(t) == shard)]
     if not tasks:
-        raise StageError(f"no {study.name.upper()} evaluation tasks in group {group!r}")
+        raise StageError(f"no {study.name.upper()} evaluation tasks in group {group!r}" + (f", shard {shard}" if shard else ""))
     root = run_dir / study.root / "evaluate"
     store = TaskStore(root, asdict(prov))
     cutoffs_all = pd.read_parquet(prepare / "cutoffs.parquet")
@@ -284,14 +308,21 @@ def run_evaluate(run_dir: Path, config: dict, data_dir: Path, group: str, manife
                 if task["kind"] == "statistical":
                     members = statistical_chunk_members(samples, frequency, task["chunk"])
                     return {**common, "series": [by_id[u] for u in members], "cutoffs": cutoffs[cutoffs["unique_id"].isin(members)]}
-                spec = Task("global", frequency, task["model"], "stl_sn", None, task["feature_name"], "cohort", main_seed, 0)
-                members, bucket_of = global_task_members(spec, samples, buckets)
-                entry = frozen["entries"][entry_key(task["model"], frequency, task["variant"])]
+                strategy, scope = task.get("strategy", "stl_sn"), task.get("scope", "cohort")
+                if study.members is not None:
+                    members, bucket_of = study.members(task, samples, buckets, main_seed)
+                else:
+                    spec = Task("global", frequency, task["model"], strategy, None, task["feature_name"], scope, main_seed, 0)
+                    members, bucket_of = global_task_members(spec, samples, buckets)
+                if study.entries is not None:
+                    entries = study.entries(task, frozen)
+                else:
+                    entries = {config_key(task["model"], frequency, "nonseasonal"):
+                               frozen["entries"][entry_key(task["model"], frequency, task["variant"])]}
                 return {**common, "pool": pd.concat([by_id[u] for u in members], ignore_index=True), "bucket_of": bucket_of,
-                        "cutoffs": cutoffs[cutoffs["unique_id"].isin(members)],
-                        "entries": {config_key(task["model"], frequency, "nonseasonal"): entry},
-                        "spec": {"feature_name": task["feature_name"], "frequency": frequency, "strategy": "stl_sn",
-                                 "model": task["model"], "scope": "cohort", "seed": main_seed, "stl_variant": task["variant"]}}
+                        "cutoffs": cutoffs[cutoffs["unique_id"].isin(members)], "entries": entries,
+                        "spec": {"feature_name": task["feature_name"], "frequency": frequency, "strategy": strategy,
+                                 "model": task["model"], "scope": scope, "seed": main_seed, "stl_variant": task["variant"]}}
 
             if workers <= 1:
                 for task in pending:
