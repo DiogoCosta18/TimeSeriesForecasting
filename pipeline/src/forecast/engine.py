@@ -29,7 +29,7 @@ from src.forecast import models
 from src.forecast.metrics import row_metrics
 from src.forecast.registry import STRATEGY_TARGETS, config_key, family
 from src.forecast.result import ForecastResult, forecast_hash
-from src.forecast.targets import component_targets, stl_sn_forecast
+from src.forecast.targets import component_targets, decomposition_of, season_length_one, stl_sn_forecast
 from src.metrics.rel_naive import seasonal_naive_forecast
 
 METRICS = ["relnaive_capped", "relnaive", "mase", "smape", "mae", "pocid"]
@@ -101,8 +101,8 @@ def evaluate_global_task(task: dict, series: pd.DataFrame, cutoffs: pd.DataFrame
     if family(model) == "statistical":
         raise ValueError("statistical models are evaluated per series (evaluate_statistical_series)")
     variant = _variant(strategy, task.get("stl_variant", "default"))
-    if variant == "stlf":
-        raise ValueError("the stlf variant is defined for statistical models only (change log v2.4)")
+    if season_length_one(variant):
+        raise ValueError(f"the {variant} variant is defined for statistical models only (change log v2.4, v2.12)")
     keys = {"feature_name": task["feature_name"], "frequency": frequency, "strategy": strategy,
             "family": family(model), "model": model, "scope": task["scope"], "seed": seed,
             **({} if variant == "default" else {"stl_variant": variant})}
@@ -149,24 +149,33 @@ def evaluate_global_task(task: dict, series: pd.DataFrame, cutoffs: pd.DataFrame
 
 
 def _variant(strategy: str, variant: str) -> str:
-    """The STL variant of a task: the run's STL, or one of sensitivity analyses S1 and S2 (STL-SN only)."""
-    if variant != "default" and strategy != "stl_sn":
+    """The STL variant of a task: the run's STL, or one of the sensitivity analyses S1 to S4.
+    Every variant applies to STL-SN; ``p1`` (S3, change log v2.12) also to STL-AC."""
+    if variant == "default":
+        return variant
+    if strategy == "stl_ac" and variant == "p1":
+        return variant
+    if strategy != "stl_sn":
         raise ValueError(f"STL variant {variant!r} is defined for STL-SN only (change log v2.2)")
+    decomposition_of(variant)            # refuses an unknown variant
     return variant
 
 
 def _statistical_window(model: str, strategy: str, y_train, h: int, m: int,
                         variant: str = "default") -> tuple[np.ndarray, list[dict], dict]:
-    """``stlf`` (S2, change log v2.4): the model is fitted on T + R without a seasonal component
-    (season length 1), as R's stlf does; STL, the continuation and the metrics keep m."""
+    """``stlf`` (S2, change log v2.4) and the ``p1`` variants (S3, S4, change log v2.12): the model is
+    fitted on the targets without seasonality (T + R; T and R) with season length 1, as R's stlf
+    does, and on the seasonal component S with season length m; STL, the continuation and the
+    metrics keep m."""
     timing = {"fit_seconds": 0.0, "predict_seconds": 0.0}
-    if variant == "stlf" and model == "SARIMA":
-        raise ValueError("SARIMA has no non-seasonal form; the stlf variant is for ETS and ARIMA")
-    fit_m = 1 if variant == "stlf" else m
+    one = season_length_one(variant)
+    if one and model == "SARIMA":
+        raise ValueError(f"SARIMA has no non-seasonal form; the {variant} variant is for ETS and ARIMA")
     targets = {"raw": np.asarray(y_train, dtype=float)} if strategy == "direct" else component_targets(y_train, m, variant)
     results = {}
     for target in STRATEGY_TARGETS[strategy]:
         clock = {}
+        fit_m = 1 if one and target != "seasonal" else m
         results[target] = models.forecast_statistical(model, targets[target], h, fit_m, timings=clock)
         timing = {k: timing[k] + clock[k] for k in timing}
     if strategy == "direct":

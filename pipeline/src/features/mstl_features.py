@@ -20,7 +20,8 @@ def robust_scale(x: np.ndarray, eps: float = 1e-8) -> float:
     return float(1.4826 * mad + eps)
 
 
-def decompose_series(y, season_length: int, periodic: bool = False, seasonal_deg: int = 1) -> dict[str, np.ndarray]:
+def decompose_series(y, season_length: int, periodic: bool = False, seasonal_deg: int = 1,
+                     seasonal: int | None = None) -> dict[str, np.ndarray]:
     """Robust STL (protocol D9). No fallback: raises DecompositionError when STL cannot be fitted.
 
     The run's STL is statsmodels' default: a seasonal smoother of span 7 and degree 1.
@@ -29,7 +30,9 @@ def decompose_series(y, season_length: int, periodic: bool = False, seasonal_deg
     component replaced by its mean at each position of the cycle (the remainder takes the
     difference), so the seasonal pattern is the same in every cycle.
     ``seasonal_deg=0`` (sensitivity analysis S2 only, change log v2.4): the run's STL with a
-    seasonal smoother of degree 0 instead of 1, the span unchanged."""
+    seasonal smoother of degree 0 instead of 1, the span unchanged.
+    ``seasonal`` (sensitivity analysis S4 only, change log v2.12): the run's STL with a seasonal
+    smoother of that (odd) span instead of 7, the degree unchanged."""
     y = finite_array(y)
     if len(y) < 2 * season_length:
         raise DecompositionError("stl_too_short")
@@ -46,6 +49,8 @@ def decompose_series(y, season_length: int, periodic: bool = False, seasonal_deg
         return {"trend": trend, "seasonal": seasonal, "residual": y - trend - seasonal}
     elif seasonal_deg != 1:
         res = STL(y, period=season_length, seasonal_deg=seasonal_deg, robust=True).fit()
+    elif seasonal is not None:
+        res = STL(y, period=season_length, seasonal=int(seasonal), robust=True).fit()
     else:
         res = STL(y, period=season_length, robust=True).fit()
     return {"trend": np.asarray(res.trend), "seasonal": np.asarray(res.seasonal), "residual": np.asarray(res.resid)}
@@ -72,7 +77,10 @@ def non_normality_feature(y, season_length: int) -> float:
     return float(np.clip(-np.log10(float(p) + 1e-12), 0, 12))
 
 
-def evolving_seasonality_feature(y, season_length: int) -> tuple[float, dict[str, float]]:
+def evolving_seasonality_feature(y, season_length: int, periodic: bool = False) -> tuple[float, dict[str, float]]:
+    """phi_4 (D4): the standard deviation of the seasonal strength over rolling windows, each window
+    decomposed by the run's STL. ``periodic`` (exploratory analysis E10, change log v2.12): each window
+    decomposed by periodic STL instead, phi_4'."""
     y = finite_array(y)
     window = max(36, 3 * season_length) if season_length == 12 else max(16, 4 * season_length)
     step = max(1, season_length // 2)
@@ -80,7 +88,7 @@ def evolving_seasonality_feature(y, season_length: int) -> tuple[float, dict[str
         raise FeatureUndefined("insufficient_rolling_windows")
     strengths = []
     for start in range(0, len(y) - window + 1, step):
-        dec = decompose_series(y[start : start + window], season_length)
+        dec = decompose_series(y[start : start + window], season_length, periodic=periodic)
         strengths.append(seasonal_strength(dec["seasonal"], dec["residual"]))
     x = np.arange(len(strengths))
     slope = float(np.polyfit(x, strengths, deg=1)[0])
