@@ -5,6 +5,10 @@ of Table 8 into ``out``, plus ``analysis.json`` with the merge and gate hashes, 
 analysis code commit, the SHA-256 of every output and the map from paper section to
 outputs. It refuses a bundle whose gates did not pass and an ``out`` that is not empty;
 the same bundle and code give the same tables.
+
+``statistical_stl="p1"`` analyses the main specification of change log v2.12 (decision (1)): the
+statistical STL forecasts are S3's (ARIMA and ETS with season length 1 on the targets without
+seasonality; SARIMA under Direct only); ``analysis.json`` records the specification.
 """
 from __future__ import annotations
 
@@ -43,11 +47,18 @@ OUTPUTS = {
 }
 
 
-def run_analysis(run_dir: Path, out: Path, manifest_path: Path = DEFAULT_MANIFEST) -> dict:
+def run_analysis(run_dir: Path, out: Path, manifest_path: Path = DEFAULT_MANIFEST, statistical_stl: str = "run") -> dict:
     out = Path(out)
     if out.exists() and any(out.iterdir()):
         raise AnalysisError(f"{out} is not empty; analysis outputs are never overwritten")
     d = load_gated(run_dir, manifest_path)
+    undefined: tuple[str, ...] = ()
+    if statistical_stl == "p1":
+        from src.stages.sensitivity3 import main_specification
+        d = main_specification(d)
+        undefined = ("SARIMA|stl_sn", "SARIMA|stl_ac")
+    elif statistical_stl != "run":
+        raise AnalysisError(f"unknown statistical STL specification {statistical_stl!r}")
     main, s0, tables = d.main, d.main_seed, d.tables
     t = {}
 
@@ -70,7 +81,7 @@ def run_analysis(run_dir: Path, out: Path, manifest_path: Path = DEFAULT_MANIFES
     standing, top = sc.a1_standing(main)
     table("a1_standing", standing)
     table("a1_top_configurations", top)
-    h7 = {(scope, f or "all"): hy.h7(main, scope, f) for scope in ("cohort", "tercile") for f in (None, "monthly", "quarterly")}
+    h7 = {(scope, f or "all"): hy.h7(main, scope, f, undefined) for scope in ("cohort", "tercile") for f in (None, "monthly", "quarterly")}
     table("h7_summary", pd.DataFrame([r["summary"] for r in h7.values()]))
     table("h7_ranks", pd.concat([r["ranks"].assign(scope=k[0], frequency=k[1]) for k, r in h7.items()], ignore_index=True))
     table("h7_pairs", pd.concat([r["pairs"].assign(scope=k[0], frequency=k[1]) for k, r in h7.items()], ignore_index=True))
@@ -130,6 +141,7 @@ def run_analysis(run_dir: Path, out: Path, manifest_path: Path = DEFAULT_MANIFES
     if absent and not (set(absent) <= {"figures/seed_spread.png"} and not d.config["seed_check_seeds"]):
         raise AnalysisError(f"outputs of Table 8 not produced: {absent}")
     record = {"format": ANALYSIS_FORMAT, "created_at_utc": utc_now(), "analysis_code_commit": code_commit(),
+              "statistical_stl": statistical_stl,
               "merge_result_sha256": d.record["result_sha256"], "gates_created_at_utc": d.gates["created_at_utc"],
               "provenance": d.record["provenance"], "outputs_by_section": OUTPUTS,
               "files": {p: sha256_file(out / p) for p in produced}}

@@ -189,15 +189,17 @@ def h6(inst: pd.DataFrame, base_seed: int, family_id: str = "H6") -> pd.DataFram
     return _finish(pd.DataFrame(out), family_id)
 
 
-def h7(inst: pd.DataFrame, scope: str, frequency: str | None = None) -> dict:
+def h7(inst: pd.DataFrame, scope: str, frequency: str | None = None, undefined: tuple[str, ...] = ()) -> dict:
     """Friedman over configurations (model x strategy) with distinct series as blocks,
-    Nemenyi's critical difference and the pairwise table; ``scope`` cohort or tercile."""
+    Nemenyi's critical difference and the pairwise table; ``scope`` cohort or tercile.
+    ``undefined``: configurations (model|strategy) the specification does not define, left out
+    (SARIMA under STL in the main specification of change log v2.12)."""
     sub = inst[(inst["scope"] == "cohort") if scope == "cohort" else (inst["scope"] != "cohort")]
     if frequency is not None:
         sub = sub[sub["frequency"] == frequency]
     sub = sub.assign(configuration=sub["model"].astype(str) + "|" + sub["strategy"].astype(str))
     models = MODELS if scope == "cohort" else GLOBAL_MODELS
-    expected = [f"{m}|{s}" for m in models for s in STRATEGIES]
+    expected = [f"{m}|{s}" for m in models for s in STRATEGIES if f"{m}|{s}" not in undefined]
     keys = ["feature_name", "frequency", "unique_id", "window"]
     wide = sub[keys + ["configuration", PRIMARY]].astype({k: str for k in keys}).set_index(keys + ["configuration"])[PRIMARY]
     if wide.index.duplicated().any():

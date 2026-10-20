@@ -7,7 +7,7 @@
     python -m src.cli evaluate --config C --run DIR --data-dir D --shard FAMILY-FREQUENCY [--only TASK_ID ...] [--workers N]
     python -m src.cli merge    --run DIR                   # refuses mismatched hashes
     python -m src.cli gates    --run DIR                   # G1-G13; blocks the analysis on failure
-    python -m src.cli analyse  --run DIR --out OUT
+    python -m src.cli analyse  --run DIR --out OUT [--statistical-stl p1]   # p1: main specification (v2.12)
 
 Every stage reads the code commit from git and refuses a working tree with uncommitted
 changes; the other hashes come from the files themselves.
@@ -45,6 +45,8 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("analyse")
     p.add_argument("--run", required=True, type=Path)
     p.add_argument("--out", required=True, type=Path)
+    p.add_argument("--statistical-stl", choices=["run", "p1"], default="run",
+                   help="p1: statistical STL rows of S3, SARIMA under Direct only (change log v2.12, decision 1)")
 
     if argv is None:
         argv = sys.argv[1:]
@@ -94,7 +96,7 @@ def main(argv: list[str] | None = None) -> int:
     elif args.stage == "analyse":
         from src.analysis.run import run_analysis
 
-        print(run_analysis(args.run, args.out, manifest))
+        print(run_analysis(args.run, args.out, manifest, args.statistical_stl))
     return 0
 
 
