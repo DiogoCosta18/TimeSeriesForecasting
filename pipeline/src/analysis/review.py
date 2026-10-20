@@ -230,6 +230,7 @@ def run_review(run_dir: Path, strength_path: Path, out: Path, statistical_stl: s
     out = Path(out)
     if out.exists() and any(out.iterdir()):
         raise AnalysisError(f"{out} is not empty; exploratory outputs are never overwritten")
+    commit = code_commit()                      # refuses an uncommitted tree before anything is written
     d = load_gated(run_dir, manifest_path)
     if statistical_stl == "p1":
         from src.stages.sensitivity3 import main_specification
@@ -249,7 +250,7 @@ def run_review(run_dir: Path, strength_path: Path, out: Path, statistical_stl: s
     out.mkdir(parents=True, exist_ok=True)
     for name, df in outputs.items():
         df.to_csv(out / f"{name}.csv", index=False)
-    record = {"status": STATUS, "code_commit": code_commit(), "created_at_utc": utc_now(),
+    record = {"status": STATUS, "code_commit": commit, "created_at_utc": utc_now(),
               "statistical_stl": statistical_stl, "strength_table": str(strength_path), "e10_table": str(e10_path),
               "merge_result_sha256": d.record["result_sha256"], "main_seed": s0,
               "n_stable": int(x["stable"].sum()), "n_strong": int(x["strong"].sum()), "r1_reproduces_a15": True,

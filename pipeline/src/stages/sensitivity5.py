@@ -207,6 +207,7 @@ def run_partitions(run_dir: Path, config: dict) -> dict:
     out = run_dir / ROOT / "partitions"
     if out.exists() and any(out.iterdir()):
         raise StageError(f"{out} is not empty; S5 outputs are never overwritten")
+    commit = code_commit()                      # refuses an uncommitted tree before anything is written
     prepare = run_dir / "prepare"
     table = partition_table(pd.read_parquet(prepare / "samples.parquet"), pd.read_parquet(prepare / "buckets.parquet"),
                             pd.read_parquet(prepare / "features.parquet"), pd.read_parquet(prepare / "bucket_summary.parquet"),
@@ -215,7 +216,7 @@ def run_partitions(run_dir: Path, config: dict) -> dict:
     out.mkdir(parents=True)
     table.to_csv(out / "partitions.csv", index=False)
     ks.to_csv(out / "ks.csv", index=False)
-    write_json(out / "checks.json", {**check, "code_commit": code_commit(), "created_at_utc": utc_now(),
+    write_json(out / "checks.json", {**check, "code_commit": commit, "created_at_utc": utc_now(),
                                      "partitions_sha256": sha256_json(table.to_dict(orient="list"))})
     if not check["passed"]:
         raise StageError(f"S5 partition checks failed: {check}; S5 is not run")
