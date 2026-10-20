@@ -68,3 +68,37 @@ The pilot runs the same code with `configs/pilot_v2.yaml`: two features (evolvin
 nonlinearity), 100 series per source per feature in 25 strata, a tuning set of 100 per source,
 3 trials per study, main seed only. Nothing else differs from `configs/rerun_v2.yaml`. Pilot results
 are never reported.
+
+## Sensitivity and exploratory analyses
+
+These run on a finished run (after `gates`; the analyses also after `analyse`) and write into their own
+folder inside `RUN/`. None of them adds a confirmatory hypothesis. Sensitivity analyses S1 to S5 train
+new forecasts with the stages `tune` (where a study tunes), `freeze`, `evaluate` (`--group cpu|gpu`,
+optionally `--shard FAMILY-FREQUENCY`) and `analyse`. The exploratory analyses only read the run.
+
+| Module | Analysis | Folder |
+|---|---|---|
+| `src.stages.sensitivity` | S1: STL-SN with log and periodic STL (ETS, XGBoost, NHITS, PatchTST) | `sensitivity_s1/` |
+| `src.stages.sensitivity2` | S2: seasonal smoother of degree 0, last three cycles, `stlf` | `sensitivity_s2/` |
+| `src.stages.sensitivity3` | S3: ARIMA and ETS with season length 1 on the targets without seasonality | `sensitivity_s3/` |
+| `src.stages.sensitivity4` | S4: periodic STL and a seasonal smoother of span 25 for all models, with a tuning check | `sensitivity_s4/` |
+| `src.stages.sensitivity5` | S5: random groups of the bucket sizes, and a third of the training steps | `sensitivity_s5/` |
+| `src.analysis.exploratory` | E1–E6: the per-series oracle, a feature rule, feature cells and others | `OUT` |
+| `src.analysis.exploratory2` | E7–E9: seasonal strength, the test behind each label, Direct + STL-SN | `OUT` |
+| `src.analysis.exploratory3` | E10: evolving seasonality with periodic STL | `exploratory3_<commit>/` |
+| `src.analysis.review` | R1–R3: H1 per seed, the best STL-SN against the best Direct, moderators | `OUT` |
+
+```bash
+python -m src.stages.sensitivity5 partitions --config C --run RUN    # S5's random groups and their checks
+python -m src.stages.sensitivity3 STAGE --config C --run RUN [--data-dir D] [--workers N] [--reference-s2 RUN2]
+python -m src.stages.sensitivity4 STAGE --config C --run RUN [--data-dir D] [--group G] [--strength E7_TABLE] [--reference-s1 RUN2]
+python -m src.stages.sensitivity5 STAGE --config C --run RUN [--data-dir D] [--group G] [--workers N]
+python -m src.analysis.exploratory3 --config C --run RUN --data-dir D [--strength E7_TABLE] [--statistical-stl p1]
+python -m src.analysis.review --run RUN --strength E7_TABLE --out OUT [--statistical-stl p1] [--e10 E10_TABLE]
+```
+
+**Main specification.** In the paper, ARIMA and ETS under STL are fitted with season length 1 on the
+targets without seasonality, as R's `stlf` does, and SARIMA, undefined there, is reported under Direct
+only. `python -m src.cli analyse --run RUN --out OUT --statistical-stl p1` writes the analysis of that
+specification from S3's forecasts (S3 must be analysed first); without the flag the analysis is that of
+the run's original specification (season length m on every target).
