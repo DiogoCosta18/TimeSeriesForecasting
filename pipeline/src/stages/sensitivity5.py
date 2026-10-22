@@ -291,7 +291,7 @@ def run_analyse(run_dir: Path, config: dict, manifest_path: Path = DEFAULT_MANIF
     bucket_summary = pd.read_parquet(prepare / "bucket_summary.parquet")
     main_seed = int(config["random_seed"])
     tasks = eval_tasks(bucket_summary, samples)
-    s5_rows, facts = s1._s1_rows(run_dir, tasks, ROOT)
+    s5_rows, facts = s1._s1_rows(run_dir, tasks, ROOT, s1.ANALYSIS_COLUMNS)
     record, rows, failed = load_merged(run_dir, ROW_COLUMNS + ["forecast_hash"])
     glob = rows[(rows["family"] != "statistical") & (rows["seed"] == main_seed)]
 

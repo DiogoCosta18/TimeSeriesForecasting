@@ -187,7 +187,7 @@ def s1_control(ctrl: pd.DataFrame, reference: Path | None) -> dict:
     samples = pd.read_parquet(prepare / "samples.parquet")
     tasks = [t for t in s1.eval_tasks(pd.read_parquet(prepare / "bucket_summary.parquet"), samples)
              if t["kind"] == "statistical" and t["variant"] == "periodic"]
-    ref, facts = s1._s1_rows(reference, tasks, s1.ROOT)
+    ref, facts = s1._s1_rows(reference, tasks, s1.ROOT, s1.ANALYSIS_COLUMNS)
     if facts["missing"] or facts["changed"]:
         return {"reference": str(reference), "passed": False, "missing": facts["missing"], "changed": facts["changed"]}
     keys = ["model", "unique_id", "window"]
@@ -230,9 +230,9 @@ def run_analyse(run_dir: Path, config: dict, strength: Path | None, manifest_pat
     samples, buckets = pd.read_parquet(prepare / "samples.parquet"), pd.read_parquet(prepare / "buckets.parquet")
     bucket_summary = pd.read_parquet(prepare / "bucket_summary.parquet")
     tasks = eval_tasks(bucket_summary, samples)
-    s4_rows, facts = s1._s1_rows(run_dir, tasks, ROOT)
+    s4_rows, facts = s1._s1_rows(run_dir, tasks, ROOT, s1.ANALYSIS_COLUMNS)
     s3_tasks = [t for t in s3.eval_tasks(bucket_summary, samples) if t["strategy"] == "stl_sn" and t["variant"] == s3.VARIANT]
-    s3_rows, s3_facts = s1._s1_rows(run_dir, s3_tasks, s3.ROOT)
+    s3_rows, s3_facts = s1._s1_rows(run_dir, s3_tasks, s3.ROOT, s1.ANALYSIS_COLUMNS)
     record, rows, failed = load_merged(run_dir, ROW_COLUMNS + ["forecast_hash"])
     main_seed = int(config["random_seed"])
     models = [*GLOBAL_MODELS, *STATISTICAL]

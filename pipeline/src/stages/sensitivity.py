@@ -341,8 +341,25 @@ def run_evaluate(run_dir: Path, config: dict, data_dir: Path, group: str, manife
 
 # --- analyse ---------------------------------------------------------------------------------------------
 
-def _s1_rows(run_dir: Path, tasks: list[dict], root_name: str = ROOT) -> tuple[pd.DataFrame, dict]:
-    """The rows of every completed sensitivity task (hash-checked) and the facts the checks need."""
+# the columns of a study's rows its analysis reads: without the forecasts themselves (y_test, yhat, ...), which
+# the checks compare through forecast_hash, the rows of the largest study (S5) fit in a few GB
+ANALYSIS_COLUMNS = [*ROW_COLUMNS, "forecast_hash", "stl_variant"]
+
+
+def _present(path: Path, columns: list[str] | None) -> list[str] | None:
+    """The requested columns that a parquet file holds (a default-variant row has no ``stl_variant``)."""
+    if columns is None:
+        return None
+    import pyarrow.parquet as pq
+
+    names = set(pq.read_schema(path).names)
+    return [c for c in columns if c in names]
+
+
+def _s1_rows(run_dir: Path, tasks: list[dict], root_name: str = ROOT,
+             columns: list[str] | None = None) -> tuple[pd.DataFrame, dict]:
+    """The rows of every completed sensitivity task (hash-checked) and the facts the checks need; with
+    ``columns``, only those of them (the file's hash is still checked on the whole file)."""
     root = Path(run_dir) / root_name / "evaluate"
     frames, missing, changed, commits, pins, configs = [], [], [], set(), set(), set()
     for task in tasks:
@@ -355,7 +372,7 @@ def _s1_rows(run_dir: Path, tasks: list[dict], root_name: str = ROOT) -> tuple[p
         if sha256_file(output) != record["sha256"]:
             changed.append(task["task_id"])
             continue
-        frames.append(pd.read_parquet(output))
+        frames.append(pd.read_parquet(output, columns=_present(output, columns)))
         commits.add(record["provenance"]["code_commit"])
         configs.add(record["provenance"]["configs_sha256"])
         pins.add(bool(record["platform"]["pinned"]))

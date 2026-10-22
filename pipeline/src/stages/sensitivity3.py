@@ -99,7 +99,7 @@ def s2_check(s3_rows: pd.DataFrame, reference: Path | None) -> dict:
     samples = pd.read_parquet(prepare / "samples.parquet")
     tasks = [t for t in s2.eval_tasks(pd.read_parquet(prepare / "bucket_summary.parquet"), samples)
              if t["kind"] == "statistical" and t["variant"] == "stlf"]
-    ref, facts = s1._s1_rows(reference, tasks, s2.ROOT)
+    ref, facts = s1._s1_rows(reference, tasks, s2.ROOT, s1.ANALYSIS_COLUMNS)
     if facts["missing"] or facts["changed"]:
         return {"reference": str(reference), "passed": False, "missing": facts["missing"], "changed": facts["changed"]}
     mine = s3_rows[(s3_rows["strategy"] == "stl_sn") & ~s3_rows["task_id"].astype(str).str.startswith(CONTROL_PREFIX)]
@@ -122,7 +122,7 @@ def run_analyse(run_dir: Path, config: dict, manifest_path: Path = DEFAULT_MANIF
     prepare = run_dir / "prepare"
     samples, buckets = pd.read_parquet(prepare / "samples.parquet"), pd.read_parquet(prepare / "buckets.parquet")
     tasks = eval_tasks(pd.read_parquet(prepare / "bucket_summary.parquet"), samples)
-    s3_rows, facts = s1._s1_rows(run_dir, tasks, ROOT)
+    s3_rows, facts = s1._s1_rows(run_dir, tasks, ROOT, s1.ANALYSIS_COLUMNS)
     record, rows, failed = load_merged(run_dir, ROW_COLUMNS + ["forecast_hash"])
     stat = rows[(rows["family"] == "statistical")]
 
@@ -200,7 +200,7 @@ def main_specification(d: AnalysisData) -> AnalysisData:
         raise AnalysisError("the main specification needs S3, analysed with its checks passed")
     tasks = [t for t in eval_tasks(d.tables["bucket_summary"], d.tables["samples"])
              if not t["task_id"].startswith(CONTROL_PREFIX)]
-    p1, facts = s1._s1_rows(d.run_dir, tasks, ROOT)
+    p1, facts = s1._s1_rows(d.run_dir, tasks, ROOT, s1.ANALYSIS_COLUMNS)
     if facts["missing"] or facts["changed"]:
         raise AnalysisError(f"S3 rows missing or changed since its analysis: {facts['missing'] + facts['changed']}")
 
