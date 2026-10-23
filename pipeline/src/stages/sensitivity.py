@@ -95,7 +95,8 @@ class Study:
 
     An evaluation task is a dict with ``task_id``, ``kind`` (global | statistical), ``group``,
     ``frequency``, ``model``, ``variant`` and, for a global task, ``feature_name``; it may also name
-    its ``strategy`` (default STL-SN) and, for a global task, its ``scope`` (default cohort). A study
+    its ``strategy`` (default STL-SN) and, for a global task, its ``scope`` (default cohort) and ``seed`` (default
+    the main seed). A study
     whose global tasks train on other pools or with other entries than S1's provides ``members``
     (task, samples, buckets, main seed -> the pool's series and each series' bucket) and ``entries``
     (task, frozen configurations -> {config_key: entry} for the targets of the task's strategy)."""
@@ -322,7 +323,8 @@ def run_evaluate(run_dir: Path, config: dict, data_dir: Path, group: str, manife
                 return {**common, "pool": pd.concat([by_id[u] for u in members], ignore_index=True), "bucket_of": bucket_of,
                         "cutoffs": cutoffs[cutoffs["unique_id"].isin(members)], "entries": entries,
                         "spec": {"feature_name": task["feature_name"], "frequency": frequency, "strategy": strategy,
-                                 "model": task["model"], "scope": scope, "seed": main_seed, "stl_variant": task["variant"]}}
+                                 "model": task["model"], "scope": scope, "seed": int(task.get("seed", main_seed)),
+                                 "stl_variant": task["variant"]}}
 
             if workers <= 1:
                 for task in pending:
