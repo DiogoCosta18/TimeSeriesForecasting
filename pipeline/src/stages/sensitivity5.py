@@ -39,7 +39,7 @@ import pandas as pd
 from scipy import stats as sps
 
 from src.analysis import stats
-from src.analysis.data import ROW_COLUMNS, _wide, build_instances, per_series
+from src.analysis.data import (CATEGORIES, ROW_COLUMNS, STATISTICAL_SEED, STL_KEYS, VALUES, AnalysisError, per_series)
 from src.analysis.hypotheses import _finish, _test, one_sample
 from src.data.frozen import DEFAULT_MANIFEST
 from src.data.schemas import FEATURE_NAMES
@@ -229,6 +229,58 @@ ARM_KEYS = ["feature_name", "frequency", "unique_id", "source_dataset", "window"
             "seed_key"]
 
 
+# The S5 rows and the run's global rows are some five million rows of repeated strings: the analysis keeps the
+# text columns as categories from loading to the per-series values, and frees each frame once it is used.
+INSTANCE_COLUMNS = ["task_id", *[k for k in STL_KEYS if k != "seed_key"], "strategy", "seed", "status", *VALUES]
+TEXT_COLUMNS = ["task_id", "feature_name", "frequency", "unique_id", "source_dataset", "family", "model", "scope",
+                "bucket", "strategy", "status"]
+
+
+def lean(df: pd.DataFrame, columns: list[str]) -> pd.DataFrame:
+    """Only ``columns``, the text ones as categories."""
+    out = df[columns].copy()
+    for c in TEXT_COLUMNS:
+        if c in out.columns and not isinstance(out[c].dtype, pd.CategoricalDtype):
+            out[c] = out[c].astype("category")
+    return out
+
+
+def concat_lean(frames: list[pd.DataFrame]) -> pd.DataFrame:
+    """Concatenate frames of the same columns, keeping the categorical ones categorical (union of categories)."""
+    from pandas.api.types import union_categoricals
+
+    data = {}
+    for c in frames[0].columns:
+        if all(isinstance(f[c].dtype, pd.CategoricalDtype) for f in frames):
+            data[c] = union_categoricals([f[c] for f in frames], sort_categories=True, ignore_order=True)
+        else:
+            data[c] = np.concatenate([f[c].to_numpy() for f in frames])
+    return pd.DataFrame(data)
+
+
+def global_instances(rows: pd.DataFrame, main_seed: int) -> pd.DataFrame:
+    """src.analysis.data.build_instances for global rows only (S5 has no statistical rows): the same seed key,
+    main-seed flag and categories, without its copies for the statistical views."""
+    if (rows["family"].astype(str) == "statistical").any():
+        raise AnalysisError("S5's instances are global rows only")
+    if rows["bucket"].isna().any():
+        raise AnalysisError("global rows without a bucket")
+    inst = rows.assign(seed_key=rows["seed"].astype("Int64").fillna(STATISTICAL_SEED).astype("int64")).drop(columns="seed")
+    inst["main_seed"] = inst["seed_key"].isin([main_seed, STATISTICAL_SEED])
+    for column in CATEGORIES:
+        if not isinstance(inst[column].dtype, pd.CategoricalDtype):
+            inst[column] = inst[column].astype("category")
+    return inst
+
+
+def wide_lean(df: pd.DataFrame, keys: list[str], column: str, value: str) -> pd.DataFrame:
+    """src.analysis.data._wide without turning the categorical keys into strings (the index keeps their codes)."""
+    s = pd.Series(df[value].to_numpy(), index=pd.MultiIndex.from_arrays([df[k] for k in [*keys, column]]))
+    if s.index.duplicated().any():
+        raise AnalysisError(f"instances are not unique on {keys + [column]}")
+    return s.unstack(column)
+
+
 def arm_of(scope: pd.Series) -> pd.Series:
     s = scope.astype(str)
     base = s.str.removesuffix(THIRD)
@@ -239,14 +291,21 @@ def arm_of(scope: pd.Series) -> pd.Series:
 def deltas(inst: pd.DataFrame, suffix: str = "") -> pd.DataFrame:
     """Per instance Delta_FT (cohort - tercile), Delta_rand (cohort - random) and the contrast (random -
     tercile), long format with a column ``quantity``; ``suffix`` "_s3" takes the second arm's pools."""
-    wide = _wide(inst.assign(arm=arm_of(inst["scope"])), ARM_KEYS, "arm", "relnaive_capped")
+    wide = wide_lean(inst.assign(arm=arm_of(inst["scope"])), ARM_KEYS, "arm", "relnaive_capped")
     for arm in ("cohort", f"tercile{suffix}", f"random{suffix}"):
         if arm not in wide.columns:
             wide[arm] = np.nan
     q = {"delta_ft": wide["cohort"] - wide[f"tercile{suffix}"], "delta_rand": wide["cohort"] - wide[f"random{suffix}"],
          "contrast": wide[f"random{suffix}"] - wide[f"tercile{suffix}"]}
-    keys = wide.index.to_frame(index=False)
-    return pd.concat([keys.assign(quantity=name, delta=v.to_numpy()) for name, v in q.items()], ignore_index=True)
+    index = wide.index
+    if any((codes < 0).any() for codes in index.codes):
+        raise AnalysisError("an instance key is missing")
+    keys = pd.DataFrame({name: (np.asarray(level)[codes] if name in ("seed_key", "window")
+                                else pd.Categorical(np.asarray(level, dtype=object)[codes]))
+                         for name, codes, level in zip(index.names, index.codes, index.levels)})
+    quantity = pd.CategoricalDtype(sorted(q))
+    return pd.concat([keys.assign(quantity=pd.Categorical([name] * len(keys), dtype=quantity), delta=v.to_numpy())
+                      for name, v in q.items()], ignore_index=True)
 
 
 def linearity_test(d: pd.DataFrame, base_seed: int, family_id: str) -> pd.DataFrame:
@@ -254,7 +313,7 @@ def linearity_test(d: pd.DataFrame, base_seed: int, family_id: str) -> pd.DataFr
     Holm over the three strategies of each quantity, as in H6."""
     d = d.assign(linearity=d["model"].astype(str).map(LINEARITY))
     parts = []
-    for quantity, q in d.groupby("quantity", sort=True):
+    for quantity, q in d.groupby("quantity", sort=True, observed=True):
         out, fid = [], f"{family_id}[{quantity}]"
         ps = per_series(q, ["strategy", "linearity"], family_balanced=True)
         for strategy, g in ps.groupby("strategy", observed=True, sort=True):
@@ -272,7 +331,7 @@ def tables_for(d: pd.DataFrame, s0: int, tag: str) -> dict[str, pd.DataFrame]:
     out = {}
     for name, by in (("family", ["quantity", "family", "strategy"]), ("model", ["quantity", "model", "strategy"])):
         parts = [one_sample(per_series(q, by), by, s0, f"{tag}-{name}[{quantity}]")
-                 for quantity, q in d.groupby("quantity", sort=True)]
+                 for quantity, q in d.groupby("quantity", sort=True, observed=True)]
         out[f"{tag.lower()}_by_{name}"] = pd.concat(parts, ignore_index=True)
     out[f"{tag.lower()}_linearity"] = linearity_test(d, s0, f"{tag}-linearity")
     return out
@@ -292,8 +351,10 @@ def run_analyse(run_dir: Path, config: dict, manifest_path: Path = DEFAULT_MANIF
     main_seed = int(config["random_seed"])
     tasks = eval_tasks(bucket_summary, samples)
     s5_rows, facts = s1._s1_rows(run_dir, tasks, ROOT, s1.ANALYSIS_COLUMNS)
+    s5_rows = lean(s5_rows, [*INSTANCE_COLUMNS, "forecast_hash"]) if len(s5_rows) else s5_rows
     record, rows, failed = load_merged(run_dir, ROW_COLUMNS + ["forecast_hash"])
-    glob = rows[(rows["family"] != "statistical") & (rows["seed"] == main_seed)]
+    glob = lean(rows[(rows["family"] != "statistical") & (rows["seed"] == main_seed)], [*INSTANCE_COLUMNS, "forecast_hash"])
+    del rows, failed
 
     checks = {"G5_complete": {"expected": len(tasks), "missing": facts["missing"], "changed": facts["changed"]},
               "G4_commit_and_pins": {"commits": facts["commits"], "pinned": facts["pins"], "configs": facts["configs"],
@@ -314,15 +375,21 @@ def run_analyse(run_dir: Path, config: dict, manifest_path: Path = DEFAULT_MANIF
     is_ctrl = s5_rows["task_id"].astype(str).str.startswith(CONTROL_PREFIX) if len(s5_rows) else pd.Series(dtype=bool)
     if len(s5_rows):
         keys = ["feature_name", "frequency", "strategy", "model", "scope", "unique_id", "window"]
-        ctrl = s5_rows[is_ctrl][keys + ["forecast_hash"]]
-        j = ctrl.merge(glob[keys + ["forecast_hash"]], on=keys, how="left", suffixes=("", "_run"), validate="one_to_one")
+        ctrl = s5_rows[is_ctrl][keys + ["forecast_hash"]].astype({k: str for k in keys if k != "window"})
+        run_ctrl = glob[glob["model"].isin(ML_CONTROL) & (glob["feature_name"] == CONTROL_FEATURE)
+                        & glob["scope"].isin(list(BUCKET_SCOPE.values()))][keys + ["forecast_hash"]]
+        j = ctrl.merge(run_ctrl.astype({k: str for k in keys if k != "window"}), on=keys, how="left", suffixes=("", "_run"),
+                       validate="one_to_one")
         same = j["forecast_hash"] == j["forecast_hash_run"]
         checks["control_ml_tercile_reproduces_run"] = {"rows": int(len(j)), "identical": int(same.sum()),
                                                        "passed": len(j) > 0 and bool(same.all())}
 
-    arms = s5_rows[~is_ctrl] if len(s5_rows) else s5_rows
-    both = pd.concat([glob[ROW_COLUMNS], arms[ROW_COLUMNS]], ignore_index=True)
-    inst = build_instances(both, failed.iloc[0:0], buckets, main_seed)
+    arms = s5_rows.loc[~is_ctrl, INSTANCE_COLUMNS] if len(s5_rows) else glob.iloc[0:0][INSTANCE_COLUMNS]
+    del s5_rows
+    both = concat_lean([glob[INSTANCE_COLUMNS], arms])
+    del glob, arms
+    inst = global_instances(both, main_seed)
+    del both
     inst = inst[inst["main_seed"]]
     full = deltas(inst)
     reduced = deltas(inst[inst["model"].astype(str).isin(REDUCED)], THIRD)
