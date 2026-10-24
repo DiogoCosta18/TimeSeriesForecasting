@@ -16,6 +16,12 @@ smoother of span 25; a variant ending in ``p1`` (``p1``, ``periodic_p1``, ``s25_
 statistical models with season length 1 on the targets without seasonality, under STL-SN and,
 for ``p1``, STL-AC, the decomposition being the variant's stem (``p1``: the run's STL). The
 default is the run's STL (D9); its code path is unchanged.
+
+The revision runs: E1 applies ``periodic`` and ``s25`` (and, for ARIMA and ETS, ``periodic_p1`` and
+``s25_p1``) to STL-AC too. E3 works on the log scale for the statistical models under every strategy:
+``elog`` decomposes log(y) with the run's STL (Direct: the model on log(y)), ``elog_periodic`` with
+periodic STL; both fit season length 1 on the targets without seasonality, ETS with additive components
+only, and back-transform with exp.
 """
 from __future__ import annotations
 
@@ -23,8 +29,9 @@ import numpy as np
 
 from src.features.mstl_features import DecompositionError, decompose_series
 
-DECOMPOSITIONS = ("default", "log", "periodic", "deg0", "last3", "s25")
-STL_VARIANTS = (*DECOMPOSITIONS, "stlf", "p1", "periodic_p1", "s25_p1")
+DECOMPOSITIONS = ("default", "log", "periodic", "deg0", "last3", "s25", "log_periodic")
+STL_VARIANTS = (*DECOMPOSITIONS, "stlf", "p1", "periodic_p1", "s25_p1", "elog", "elog_periodic")
+LOG_SCALE = ("log", "log_periodic")                   # decompositions of log(y): forecasts back-transformed with exp
 RUN_DECOMPOSITION = ("default", "last3")              # decompositions that use the run's STL unchanged
 CONTINUATION_CYCLES = {"last3": 3}                    # seasonal cycles averaged by the continuation
 WIDE_SEASONAL_SPAN = {"s25": 25}                      # seasonal smoother span of the wide variant
@@ -36,12 +43,23 @@ def decomposition_of(variant: str) -> str:
         raise ValueError(f"unknown STL variant {variant!r}")
     if variant in ("stlf", "p1"):
         return "default"
+    if variant.startswith("elog"):
+        return "log" + variant[len("elog"):]
     return variant[: -len("_p1")] if variant.endswith("_p1") else variant
 
 
 def season_length_one(variant: str) -> bool:
     """Whether a variant fits the statistical models with season length 1 on the non-seasonal targets."""
-    return variant in ("stlf", "p1") or variant.endswith("_p1")
+    return variant in ("stlf", "p1") or variant.endswith("_p1") or additive_ets(variant)
+
+
+def additive_ets(variant: str) -> bool:
+    """E3's variants: ETS with additive components only (forecast::ets on a transformed series)."""
+    return variant.startswith("elog")
+
+
+def log_scale(variant: str) -> bool:
+    return decomposition_of(variant) in LOG_SCALE
 
 
 def component_targets(y, season_length: int, variant: str = "default") -> dict[str, np.ndarray]:
@@ -49,10 +67,10 @@ def component_targets(y, season_length: int, variant: str = "default") -> dict[s
     decomposition = decomposition_of(variant)
     if decomposition in RUN_DECOMPOSITION:
         dec = decompose_series(y, season_length)
-    elif decomposition == "log":
+    elif decomposition in LOG_SCALE:
         if not (y > 0).all():
             raise DecompositionError("log_stl_nonpositive_input")
-        dec = decompose_series(np.log(y), season_length)
+        dec = decompose_series(np.log(y), season_length, periodic=decomposition == "log_periodic")
     elif decomposition == "periodic":
         dec = decompose_series(y, season_length, periodic=True)
     elif decomposition == "deg0":
@@ -92,4 +110,4 @@ def stl_sn_forecast(nonseasonal_forecast, seasonal: np.ndarray, h: int, season_l
     decomposition = decomposition_of(variant)
     cycles = CONTINUATION_CYCLES.get(decomposition, 1)
     yhat = nonseasonal_forecast + seasonal_continuation(seasonal, h, season_length, cycles)
-    return np.exp(yhat) if decomposition == "log" else yhat
+    return np.exp(yhat) if decomposition in LOG_SCALE else yhat

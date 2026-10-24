@@ -29,7 +29,8 @@ from src.forecast import models
 from src.forecast.metrics import row_metrics
 from src.forecast.registry import STRATEGY_TARGETS, config_key, family
 from src.forecast.result import ForecastResult, forecast_hash
-from src.forecast.targets import component_targets, decomposition_of, season_length_one, stl_sn_forecast
+from src.forecast.targets import (additive_ets, component_targets, decomposition_of, log_scale, season_length_one,
+                                  seasonal_continuation, stl_sn_forecast)
 from src.metrics.rel_naive import seasonal_naive_forecast
 
 METRICS = ["relnaive_capped", "relnaive", "mase", "smape", "mae", "pocid"]
@@ -75,7 +76,7 @@ def _component_record(target: str, res: ForecastResult, trained_steps: int | Non
 
 
 def _row(keys: dict, uid: str, source: str, window: int, cutoff: int, y_train, y_test, yhat, naive,
-         components: list[dict], timing: dict, provenance: Provenance, m: int) -> dict:
+         components: list[dict], timing: dict, provenance: Provenance, m: int, extra: dict | None = None) -> dict:
     return {
         **keys, "unique_id": uid, "source_dataset": source, "window": window, "cutoff_t": cutoff,
         "status": "trained", "failure": None,
@@ -85,8 +86,20 @@ def _row(keys: dict, uid: str, source: str, window: int, cutoff: int, y_train, y
         "backend": components[0]["backend"], "backend_version": components[0]["backend_version"],
         "device": components[0]["device"], "components": json.dumps(components, sort_keys=True),
         "fit_seconds": float(timing["fit_seconds"]), "predict_seconds": float(timing["predict_seconds"]),
-        **asdict(provenance),
+        **asdict(provenance), **(extra or {}),
     }
+
+
+def ac_components(t_hat, s_hat, r_hat, seasonal_train, y_train, y_test, naive, h: int, m: int, variant: str) -> dict:
+    """The revision's STL-AC rows (E1, E3) also keep each component's forecast and variant (ii): T and R
+    modelled, S continued by its last cycle as in STL-SN (``yhat_ii`` and its metrics, suffix _ii)."""
+    s_sn = seasonal_continuation(seasonal_train, h, m)
+    yhat_ii = np.asarray(t_hat) + np.asarray(r_hat) + s_sn
+    if log_scale(variant):
+        yhat_ii = np.exp(yhat_ii)
+    metrics = {f"{k}_ii": v for k, v in row_metrics(y_train, y_test, yhat_ii, naive, m).items()}
+    return {"t_hat": [float(v) for v in t_hat], "s_hat": [float(v) for v in s_hat], "r_hat": [float(v) for v in r_hat],
+            "s_sn": [float(v) for v in s_sn], "yhat_ii": [float(v) for v in yhat_ii], **metrics}
 
 
 def evaluate_global_task(task: dict, series: pd.DataFrame, cutoffs: pd.DataFrame, frozen_entries: dict,
@@ -134,26 +147,36 @@ def evaluate_global_task(task: dict, series: pd.DataFrame, cutoffs: pd.DataFrame
             y_train, y_test = y[: train_end[uid]], y[train_end[uid]: train_end[uid] + h]
             if len(y_test) != h:
                 raise GlobalTaskError(f"{uid}: window {window} has {len(y_test)} test values, expected {h}")
+            naive = seasonal_naive_forecast(y_train, h, season_length)
+            extra = None
             if strategy == "direct":
                 yhat = results["raw"][uid].yhat
             elif strategy == "stl_sn":
                 yhat = stl_sn_forecast(results["nonseasonal"][uid].yhat, decomposed[uid]["seasonal"], h, season_length, variant)
             else:
-                yhat = results["trend"][uid].yhat + results["seasonal"][uid].yhat + results["residual"][uid].yhat
+                t_hat, s_hat, r_hat = (results[t][uid].yhat for t in ("trend", "seasonal", "residual"))
+                yhat = t_hat + s_hat + r_hat
+                if variant != "default":
+                    extra = ac_components(t_hat, s_hat, r_hat, decomposed[uid]["seasonal"], y_train, y_test, naive, h,
+                                          season_length, variant)
             components = [_component_record(target, results[target][uid], entries[target].get("trained_steps"))
                           for target in entries]
-            naive = seasonal_naive_forecast(y_train, h, season_length)
             rows.append(_row({**keys, "bucket": buckets[uid]}, uid, source, window, train_end[uid], y_train, y_test,
-                             yhat, naive, components, timing, provenance, season_length))
+                             yhat, naive, components, timing, provenance, season_length, extra))
     return pd.DataFrame(rows)
+
+
+AC_VARIANTS = ("p1", "periodic", "s25", "periodic_p1", "s25_p1", "elog", "elog_periodic")
+DIRECT_VARIANTS = ("elog",)
 
 
 def _variant(strategy: str, variant: str) -> str:
     """The STL variant of a task: the run's STL, or one of the sensitivity analyses S1 to S4.
-    Every variant applies to STL-SN; ``p1`` (S3, change log v2.12) also to STL-AC."""
+    Every variant applies to STL-SN; ``p1`` (S3, change log v2.12) also to STL-AC, and the revision's
+    E1 and E3 variants (AC_VARIANTS; E3's ``elog`` also to Direct)."""
     if variant == "default":
         return variant
-    if strategy == "stl_ac" and variant == "p1":
+    if (strategy == "stl_ac" and variant in AC_VARIANTS) or (strategy == "direct" and variant in DIRECT_VARIANTS):
         return variant
     if strategy != "stl_sn":
         raise ValueError(f"STL variant {variant!r} is defined for STL-SN only (change log v2.2)")
@@ -162,29 +185,46 @@ def _variant(strategy: str, variant: str) -> str:
 
 
 def _statistical_window(model: str, strategy: str, y_train, h: int, m: int,
-                        variant: str = "default") -> tuple[np.ndarray, list[dict], dict]:
+                        variant: str = "default") -> tuple[np.ndarray, list[dict], dict, dict | None]:
     """``stlf`` (S2, change log v2.4) and the ``p1`` variants (S3, S4, change log v2.12): the model is
     fitted on the targets without seasonality (T + R; T and R) with season length 1, as R's stlf
     does, and on the seasonal component S with season length m; STL, the continuation and the
-    metrics keep m."""
+    metrics keep m. E3's ``elog`` variants also do so on log(y), Direct included (the model on log(y)
+    with season length m), with additive ETS, and back-transform with exp. The last element: for STL-AC
+    under a revision variant, (T, S, R forecasts, training S) for ac_components, else None."""
     timing = {"fit_seconds": 0.0, "predict_seconds": 0.0}
     one = season_length_one(variant)
     if one and model == "SARIMA":
         raise ValueError(f"SARIMA has no non-seasonal form; the {variant} variant is for ETS and ARIMA")
-    targets = {"raw": np.asarray(y_train, dtype=float)} if strategy == "direct" else component_targets(y_train, m, variant)
+    if strategy == "direct":
+        y = np.asarray(y_train, dtype=float)
+        if log_scale(variant):
+            if not (y > 0).all():
+                raise ValueError("log_direct_nonpositive_input")
+            y = np.log(y)
+        targets = {"raw": y}
+    else:
+        targets = component_targets(y_train, m, variant)
     results = {}
     for target in STRATEGY_TARGETS[strategy]:
         clock = {}
-        fit_m = 1 if one and target != "seasonal" else m
-        results[target] = models.forecast_statistical(model, targets[target], h, fit_m, timings=clock)
+        fit_m = 1 if one and target not in ("seasonal", "raw") else m
+        results[target] = models.forecast_statistical(model, targets[target], h, fit_m, timings=clock,
+                                                      **({"additive": True} if additive_ets(variant) else {}))
         timing = {k: timing[k] + clock[k] for k in timing}
+    parts = None
     if strategy == "direct":
-        yhat = results["raw"].yhat
+        yhat = np.exp(results["raw"].yhat) if log_scale(variant) else results["raw"].yhat
     elif strategy == "stl_sn":
         yhat = stl_sn_forecast(results["nonseasonal"].yhat, targets["seasonal"], h, m, variant)
     else:
-        yhat = results["trend"].yhat + results["seasonal"].yhat + results["residual"].yhat
-    return yhat, [_component_record(t, r) for t, r in results.items()], timing
+        t_hat, s_hat, r_hat = (results[t].yhat for t in ("trend", "seasonal", "residual"))
+        yhat = t_hat + s_hat + r_hat
+        if log_scale(variant):
+            yhat = np.exp(yhat)
+        if variant not in ("default", "p1"):
+            parts = (t_hat, s_hat, r_hat, targets["seasonal"])
+    return yhat, [_component_record(t, r) for t, r in results.items()], timing, parts
 
 
 def evaluate_statistical_series(model: str, frequency: str, strategy: str, series: pd.DataFrame, cutoffs: pd.DataFrame,
@@ -193,6 +233,9 @@ def evaluate_statistical_series(model: str, frequency: str, strategy: str, serie
     if family(model) != "statistical":
         raise ValueError(f"{model} is not a statistical model")
     variant = _variant(strategy, stl_variant)
+    if strategy == "stl_ac" and variant != "default" and not season_length_one(variant):
+        raise ValueError(f"STL variant {variant!r} is defined for STL-SN only for the statistical models; "
+                         "STL-AC takes its season-length-1 form (change log v2.12, E1)")
     arrays = _series_arrays(series)
     if len(arrays) != 1:
         raise ValueError("evaluate_statistical_series takes exactly one series")
@@ -206,7 +249,7 @@ def evaluate_statistical_series(model: str, frequency: str, strategy: str, serie
         try:
             if len(y_test) != h:
                 raise ValueError(f"window {window} has {len(y_test)} test values, expected {h}")
-            yhat, components, timing = _statistical_window(model, strategy, y_train, h, season_length, variant)
+            yhat, components, timing, parts = _statistical_window(model, strategy, y_train, h, season_length, variant)
         except Exception as exc:  # D16: a failed row with its reason, no forecast; the task continues
             rows.append({**keys, "unique_id": uid, "source_dataset": source, "window": window, "cutoff_t": train_end,
                          "status": "failed", "failure": f"{type(exc).__name__}: {exc}"[:500],
@@ -216,6 +259,7 @@ def evaluate_statistical_series(model: str, frequency: str, strategy: str, serie
                          **asdict(provenance)})
             continue
         naive = seasonal_naive_forecast(y_train, h, season_length)
+        extra = None if parts is None else ac_components(*parts, y_train, y_test, naive, h, season_length, variant)
         rows.append(_row(keys, uid, source, window, train_end, y_train, y_test, yhat, naive, components, timing,
-                         provenance, season_length))
+                         provenance, season_length, extra))
     return pd.DataFrame(rows)

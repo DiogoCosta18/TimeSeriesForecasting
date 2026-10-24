@@ -48,7 +48,8 @@ def accelerator() -> str:
 
 # --- statistical (local) ------------------------------------------------------------------
 
-def statistical_model(model: str, season_length: int):
+def statistical_model(model: str, season_length: int, ets_model: str | None = None):
+    """``ets_model`` (E3 only): AutoETS restricted to that model string, e.g. "AZN"."""
     from statsforecast.models import AutoARIMA, AutoETS
 
     if model == "ARIMA":
@@ -56,24 +57,35 @@ def statistical_model(model: str, season_length: int):
     if model == "SARIMA":
         return AutoARIMA(season_length=season_length, D=1, approximation=True)
     if model == "ETS":
-        return AutoETS(season_length=season_length)
+        return AutoETS(season_length=season_length) if ets_model is None else AutoETS(season_length=season_length, model=ets_model)
     raise KeyError(f"{model} is not a statistical model")
 
 
-def forecast_statistical(model: str, y_train, h: int, season_length: int, timings: dict | None = None) -> ForecastResult:
+def forecast_statistical(model: str, y_train, h: int, season_length: int, timings: dict | None = None,
+                         additive: bool = False) -> ForecastResult:
     """One series. Arguments as in the valid May run (regression test I2); raises on failure.
 
     fit + predict gives the same forecasts as the earlier runs' ``forecast`` (tested) and
-    lets the two times be recorded separately in ``timings``.
+    lets the two times be recorded separately in ``timings``. ``additive`` (E3, ETS only): additive
+    components only, as forecast::ets on a transformed series: "AZN" and, with a season, "AZA", the one
+    with the lower AICc kept.
     """
     from statsforecast import StatsForecast
 
     y = np.asarray(y_train, dtype=float)
     df = pd.DataFrame({"unique_id": ["s"] * len(y), "ds": range(len(y)), "y": y})
-    sf = StatsForecast(models=[statistical_model(model, season_length)], freq=1, n_jobs=1)
     clock = {} if timings is None else timings
     start = time.perf_counter()
-    sf.fit(df=df)
+    if additive and model == "ETS":
+        fits = []
+        for spec in (["AZN", "AZA"] if season_length > 1 else ["AZN"]):
+            candidate = StatsForecast(models=[statistical_model(model, season_length, spec)], freq=1, n_jobs=1)
+            candidate.fit(df=df)
+            fits.append((candidate.fitted_[0, 0].model_["aicc"], spec, candidate))
+        sf = min(fits, key=lambda f: f[0])[2]
+    else:
+        sf = StatsForecast(models=[statistical_model(model, season_length)], freq=1, n_jobs=1)
+        sf.fit(df=df)
     clock["fit_seconds"] = time.perf_counter() - start
     start = time.perf_counter()
     fcst = sf.predict(h=h)
