@@ -32,7 +32,7 @@ KS = (2, 3)
 def stored_sn(run_dir: Path) -> pd.DataFrame:
     """The STL-SN default forecasts of the main specification: the run's global cohort rows of the main seed
     and S3's ARIMA and ETS rows (season length 1)."""
-    cols = ["unique_id", "feature_name", "frequency", "window", "family", "model", "seed", "y_test", "yhat"]
+    cols = ["unique_id", "feature_name", "frequency", "window", "family", "model", "seed", "bucket", "y_test", "yhat"]
     frames = []
     for p in sorted((run_dir / "evaluate").glob(f"*/tasks/eval__*__stl_sn__*__cohort__seed{MAIN_SEED}.parquet")):
         frames.append(pd.read_parquet(p, columns=cols))
@@ -70,6 +70,7 @@ def k_forecasts(run_dir: Path, data_dir: Path) -> pd.DataFrame:
             "pool_id": np.where(stat, "none", pd.Series(feature).astype(str) + "|" + sn["frequency"].astype(str)),
             "window": sn["window"].to_numpy(), "model": sn["model"].to_numpy(), "family": sn["family"].to_numpy(),
             "strategy": f"stl_sn_k{k}", "setting": "default", "scope": "cohort", "group": "none",
+            "bucket": np.where(stat, None, sn["bucket"].astype(object)),
             "seed": sn["seed"].astype("Int64").fillna(-1).astype("int64").to_numpy(), "scale": "raw",
             "mae": mae, "mae_naive": mae_naive, "rn": rv.relnaive_capped(mae, mae_naive)}))
     return pd.concat(out, ignore_index=True)
@@ -82,6 +83,8 @@ def run(tables: Path, data_dir: Path, out: Path, workers: int) -> pd.DataFrame:
     base = main_seed(fc[(fc["scope"] == "cohort") & (fc["setting"] != "default_m") & fc["source"].isin(["run", "s3"])
                         & fc["strategy"].isin(["direct", "stl_sn"])])
     base = base[~((base["model"] == "SARIMA"))]
+    if list(kf.columns) != list(base.columns):
+        raise ValueError(f"add-back rows in other columns than fc_errors: {list(kf.columns)}")
     both = pd.concat([base.astype({c: str for c in TEXT}), kf.astype({c: str for c in TEXT})], ignore_index=True)
     for c in TEXT:
         both[c] = both[c].astype("category")
