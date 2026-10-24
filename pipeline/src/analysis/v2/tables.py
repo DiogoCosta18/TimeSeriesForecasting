@@ -12,6 +12,7 @@ STL; ARIMA and ETS with S3's season length 1); "default_m" the run's statistical
 m (Table C4, SARIMA among them); "periodic", "s25" and "periodic_tuned" S4's (statistical models with season
 length 1). ``scope`` is cohort, tercile, random, tercile_third or random_third, and ``group`` the pool of a tercile
 or random model (Low, Medium, High; "none" for the cohort). ``seed`` is -1 for the statistical models.
+``mae_naive`` is mae / relnaive, the seasonal naive MAE plus the run's guard of 1e-8 (RELNAIVE_EPS).
 
 Run:  python -m src.analysis.v2.tables --run RUN_DIR --out OUT_DIR
 """
@@ -25,12 +26,15 @@ import pandas as pd
 
 from src.analysis.data import STATISTICAL_SEED
 from src.data.freeze_data import HORIZON
+from src.data.frozen import DEFAULT_MANIFEST
 from src.data.schemas import FEATURE_NAMES
 from src.stages import sensitivity as s1
 from src.stages import sensitivity3 as s3
 from src.stages import sensitivity4 as s4
 from src.stages import sensitivity4s as s4s
 from src.stages import sensitivity5 as s5
+from src.stages import sensitivity6 as s6
+from src.stages import sensitivity7 as s7
 from src.stages.io import StageError, code_commit, read_json, sha256_file, utc_now, write_json
 from src.stages.tasks import BUCKET_SCOPE
 from src.validation.gates import load_merged
@@ -44,13 +48,14 @@ KEYS = ["series_id", "freq", "feature_sample", "window", "model", "strategy", "s
 TEXT = ["source", "series_id", "dataset", "freq", "feature_sample", "pool_id", "model", "family", "strategy", "setting",
         "scope", "group", "bucket", "scale"]
 SCOPE_BUCKET = {v: k for k, v in BUCKET_SCOPE.items()}
+RELNAIVE_EPS = 1e-8              # the run's RelNaive divides by (MAE of the seasonal naive + 1e-8), metrics.rel_naive
 E7 = "exploratory2_977f022/tables/e7_strength.csv"      # phi7
 E10 = "exploratory3_642d834/e10_phi4.csv"               # phi4'
 
 
-def canonical(rows: pd.DataFrame, source: str, setting) -> pd.DataFrame:
+def canonical(rows: pd.DataFrame, source: str, setting, scale="raw") -> pd.DataFrame:
     """The study's rows in the columns of fc_errors; ``setting`` is the STL setting of every STL row, or a
-    function of the rows giving it row by row."""
+    function of the rows giving it row by row; ``scale`` raw or log (E3), or an array."""
     if (rows["status"] != "trained").any():
         raise StageError(f"{source}: rows that did not train")
     stat = (rows["family"] == "statistical").to_numpy()
@@ -63,7 +68,8 @@ def canonical(rows: pd.DataFrame, source: str, setting) -> pd.DataFrame:
     kind = np.where(third, np.char.add(kind.astype(str), "_third"), kind)
     group = np.where(cohort, "none", np.where(random, base.str[1:], base).astype(object))
     group = pd.Series(group).map(lambda g: SCOPE_BUCKET.get(g, g)).to_numpy()
-    stl = setting(rows) if callable(setting) else np.full(len(rows), setting, dtype=object)
+    stl = (setting(rows) if callable(setting) else np.asarray(setting, dtype=object) if np.ndim(setting)
+           else np.full(len(rows), setting, dtype=object))
     mae_naive = rows["mae"].to_numpy() / rows["relnaive"].to_numpy()
     rn = rows["relnaive_capped"].to_numpy()
     if not np.isfinite(mae_naive).all() or (mae_naive <= 0).any():
@@ -79,16 +85,16 @@ def canonical(rows: pd.DataFrame, source: str, setting) -> pd.DataFrame:
         "window": rows["window"].to_numpy(), "model": rows["model"].to_numpy(), "family": rows["family"].to_numpy(),
         "strategy": rows["strategy"].to_numpy(), "setting": np.where(rows["strategy"] == "direct", "none", stl),
         "scope": kind, "group": group, "bucket": np.where(stat, None, rows["bucket"].astype(object)),
-        "seed": rows["seed"].astype("Int64").fillna(STATISTICAL_SEED).astype("int64").to_numpy(), "scale": "raw",
+        "seed": rows["seed"].astype("Int64").fillna(STATISTICAL_SEED).astype("int64").to_numpy(), "scale": scale,
         "mae": rows["mae"].to_numpy(), "mae_naive": mae_naive, "rn": rn})
     for c in TEXT:
         out[c] = out[c].astype("category")
     return out
 
 
-def _study(run_dir: Path, tasks: list[dict], root: str, control: str) -> pd.DataFrame:
+def _study(run_dir: Path, tasks: list[dict], root: str, control: str, columns: list[str] = READ) -> pd.DataFrame:
     tasks = [t for t in tasks if not t["task_id"].startswith(control)]
-    rows, facts = s1._s1_rows(run_dir, tasks, root, READ)
+    rows, facts = s1._s1_rows(run_dir, tasks, root, columns)
     if facts["missing"] or facts["changed"]:
         raise StageError(f"{root}: task files missing or changed: {facts['missing'] + facts['changed']}")
     return rows
@@ -113,6 +119,36 @@ def sources(run_dir: Path, config: dict):
                            "periodic"), None
     yield "s5", canonical(_study(run_dir, s5.eval_tasks(summary, samples), s5.ROOT, s5.CONTROL_PREFIX), "s5",
                           "default"), None
+    if (run_dir / s6.ROOT).exists():
+        if not read_json(run_dir / s6.ROOT / "checks.json")["passed"]:
+            raise StageError("S6's checks have not passed")
+        yield "s6", s6_rows(_study(run_dir, s6.study(config).eval_tasks(summary, samples), s6.ROOT, s6.CONTROL_PREFIX,
+                                   [*READ, *S6_EXTRA])), None
+    if (run_dir / s7.ROOT).exists():
+        yield "s7", canonical(_study(run_dir, s7.eval_tasks(summary, samples), s7.ROOT, "none"), "s7", "periodic_tuned"), None
+
+
+S6_EXTRA = ["mae_ii", "relnaive_ii", "relnaive_capped_ii"]
+S6_SETTING = {"periodic": "periodic", "s25": "s25", "periodic_p1": "periodic", "s25_p1": "s25", "elog": "default",
+              "elog_periodic": "periodic"}
+
+
+def s6_rows(rows: pd.DataFrame) -> pd.DataFrame:
+    """E1, E1b and E3: the STL setting from the variant, the log scale for E3, and variant (ii) of every STL-AC
+    row as a forecast of its own (strategy stl_ac_ii)."""
+    rows = rows.reset_index(drop=True)
+    setting = rows["stl_variant"].astype(str).map(S6_SETTING)
+    if setting.isna().any():
+        raise StageError(f"S6 rows of an unknown variant: {sorted(set(rows.loc[setting.isna(), 'stl_variant']))}")
+    scale = np.where(rows["stl_variant"].astype(str).str.startswith("elog"), "log", "raw")
+    ac = (rows["strategy"] == "stl_ac").to_numpy()
+    ii = rows[ac].assign(strategy="stl_ac_ii", mae=rows.loc[ac, "mae_ii"], relnaive=rows.loc[ac, "relnaive_ii"],
+                         relnaive_capped=rows.loc[ac, "relnaive_capped_ii"])
+    parts = [canonical(rows, "s6", setting.to_numpy(), scale), canonical(ii, "s6", setting[ac].to_numpy(), scale[ac])]
+    out = pd.concat([p.astype({c: str for c in TEXT}) for p in parts], ignore_index=True)
+    for c in TEXT:
+        out[c] = out[c].astype("category")
+    return out
 
 
 def series_meta(run_dir: Path) -> pd.DataFrame:
@@ -157,6 +193,32 @@ def instances(fc: pd.DataFrame, inst: pd.DataFrame) -> pd.DataFrame:
     out = pd.concat([fc[~stat], views[fc.columns]], ignore_index=True)
     for c in TEXT:
         out[c] = out[c].astype("category")
+    return out
+
+
+def windows(run_dir: Path, data_dir: Path, manifest_path: Path = DEFAULT_MANIFEST) -> pd.DataFrame:
+    """Every sampled series' training and test values in each window (series_id, freq, window, m, h, y_train,
+    y_test), from the frozen copy and the run's cutoffs, as the models saw them."""
+    from src.data.frozen import load_manifest
+    from src.data.load_m_datasets import load_dataset_pair
+
+    run_dir = Path(run_dir)
+    config = read_json(run_dir / "prepare" / "bundle.json")["config"]
+    samples = pd.read_parquet(run_dir / "prepare" / "samples.parquet")
+    cutoffs = pd.read_parquet(run_dir / "prepare" / "cutoffs.parquet")
+    rows = []
+    for freq, fcfg in config["frequencies"].items():
+        m, h = int(fcfg["season_length"]), int(fcfg["horizon"])
+        ids = set(samples.loc[samples["frequency"] == freq, "unique_id"])
+        data = load_dataset_pair({"frequency": freq, **fcfg}, data_dir, load_manifest(manifest_path))
+        y = {uid: g["y"].to_numpy(dtype=float) for uid, g in data[data["unique_id"].isin(ids)].groupby("unique_id")}
+        cut = cutoffs[(cutoffs["frequency"] == freq) & cutoffs["unique_id"].isin(ids)]
+        for uid, window, end in zip(cut["unique_id"], cut["window"], cut["train_end_idx"].astype(int)):
+            rows.append({"series_id": uid, "freq": freq, "window": int(window), "m": m, "h": h,
+                         "y_train": y[uid][:end], "y_test": y[uid][end:end + h]})
+    out = pd.DataFrame(rows).sort_values(["freq", "series_id", "window"], ignore_index=True)
+    if len(out) != 3 * samples[["frequency", "unique_id"]].drop_duplicates().shape[0] or (out["y_test"].map(len) != out["h"]).any():
+        raise StageError("the windows do not give every sampled series three full test windows")
     return out
 
 

@@ -29,17 +29,21 @@ GLOBAL = ["ml", "neural", "transformer"]
 BASE = ["series_id", "freq", "feature_sample", "window", "family", "model", "strategy", "setting", "scope", "group", "seed"]
 
 
-def contrast(df: pd.DataFrame, arm: pd.Series, first: str, second: str, vary: list[str]) -> pd.DataFrame:
-    """Per forecast rn[first] - rn[second], paired on every key of BASE but ``vary``; unpaired forecasts are dropped."""
+def contrast(df: pd.DataFrame, arm: pd.Series, first: str, second: str, vary: list[str],
+             keep: bool = False, value: str = "rn") -> pd.DataFrame:
+    """Per forecast value[first] - value[second] (RelNaive by default), paired on every key of BASE but ``vary``;
+    unpaired forecasts are dropped. ``keep``: also the two values, as columns ``first`` and ``second``."""
     keys = [k for k in BASE if k not in vary]
     d = df.assign(arm=np.asarray(arm, dtype=object))
     d = d[d["arm"].isin([first, second])]
-    s = pd.Series(d["rn"].to_numpy(), index=pd.MultiIndex.from_frame(d[keys + ["arm"]]))
+    s = pd.Series(d[value].to_numpy(), index=pd.MultiIndex.from_frame(d[keys + ["arm"]]))
     if s.index.duplicated().any():
         raise ValueError(f"forecasts not unique on {keys} for {first} - {second}")
     wide = s.unstack("arm")
     out = wide.index.to_frame(index=False)
     out["delta"] = (wide[first] - wide[second]).to_numpy()
+    if keep:
+        out["first"], out["second"] = wide[first].to_numpy(), wide[second].to_numpy()
     return out.dropna(subset=["delta"])
 
 
