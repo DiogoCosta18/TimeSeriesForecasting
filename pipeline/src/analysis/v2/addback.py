@@ -62,9 +62,12 @@ def k_forecasts(run_dir: Path, data_dir: Path) -> pd.DataFrame:
                         for u, w, yt, yh in zip(sn["unique_id"], sn["window"], sn["y_test"], sn["yhat"])])
         mae_naive = np.array([naive[(u, int(w))] for u, w in zip(sn["unique_id"], sn["window"])])
         stat = (sn["family"] == "statistical").to_numpy()
+        feature = np.where(stat, "none", sn["feature_name"].astype(object))
         out.append(pd.DataFrame({
-            "source": "a5", "series_id": sn["unique_id"].to_numpy(), "freq": sn["frequency"].to_numpy(),
-            "feature_sample": np.where(stat, "none", sn["feature_name"].astype(object)),
+            "source": "a5", "series_id": sn["unique_id"].to_numpy(),
+            "dataset": sn["unique_id"].astype(str).str.split("_").str[0].to_numpy(), "freq": sn["frequency"].to_numpy(),
+            "feature_sample": feature,
+            "pool_id": np.where(stat, "none", pd.Series(feature).astype(str) + "|" + sn["frequency"].astype(str)),
             "window": sn["window"].to_numpy(), "model": sn["model"].to_numpy(), "family": sn["family"].to_numpy(),
             "strategy": f"stl_sn_k{k}", "setting": "default", "scope": "cohort", "group": "none",
             "seed": sn["seed"].astype("Int64").fillna(-1).astype("int64").to_numpy(), "scale": "raw",
