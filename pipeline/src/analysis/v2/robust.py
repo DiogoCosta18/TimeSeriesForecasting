@@ -92,8 +92,10 @@ def thresholds(questions: Path) -> pd.DataFrame:
     rows = []
     for path in sorted(Path(questions).glob("*.csv")):
         q = pd.read_csv(path)
-        if not {"sim_lo", "sim_hi", "label"} <= set(q.columns) or (q.get("metric") == "gm_relmae").any():
+        if not {"sim_lo", "sim_hi", "label"} <= set(q.columns):
             continue
+        if "metric" in q.columns:                       # Q12: the log-ratio cells have their own threshold
+            q = q[q["metric"] != "gm_relmae"].reset_index(drop=True)
         for delta in THRESHOLDS:
             new = [rv.label(lo, hi, delta) for lo, hi in zip(q["sim_lo"], q["sim_hi"])]
             changed = q.assign(label_new=new)[np.array(new) != q["label"].to_numpy()]
