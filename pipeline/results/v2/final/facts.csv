@@ -1,0 +1,11 @@
+key,value
+v2-thr-relmodel,0.01168032477031106
+v2-thr-seed-spread,0.012203894419230466
+v2-mean-instances-per-series,1.695513952666902
+v2-a9-ridge-alpha-median,3.917733616048204
+v2-a9-ridge-alpha-min,0.2269144810991481
+v2-a9-ridge-alpha-max,99.71878873752425
+v2-a9-ridge-studies,10
+v2-a18-cpu-models,AMD EPYC 7B13 64-Core Processor
+v2-a18-all-pinned,True
+v2-a18-blas-threads,1

@@ -1,0 +1,17 @@
+freq,dataset,ets_type,share,n
+monthly,M3,N,0.5208131655,1033
+monthly,M3,A,0.284607938,1033
+monthly,M3,M,0.1858664085,1033
+monthly,M3,mixed,0.008712487899,1033
+monthly,M4,N,0.4721017635,3459
+monthly,M4,A,0.4310494363,3459
+monthly,M4,M,0.09366869037,3459
+monthly,M4,mixed,0.003180109858,3459
+quarterly,M3,N,0.665615142,634
+quarterly,M3,A,0.167192429,634
+quarterly,M3,M,0.1577287066,634
+quarterly,M3,mixed,0.009463722397,634
+quarterly,M4,N,0.6153846154,3367
+quarterly,M4,A,0.1966141966,3367
+quarterly,M4,M,0.1835461835,3367
+quarterly,M4,mixed,0.004455004455,3367

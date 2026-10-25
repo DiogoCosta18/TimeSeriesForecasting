@@ -1,0 +1,15 @@
+what,freq,dataset,share,n
+"pass, first window",monthly,M3,0.279767667,1033
+"pass, first window",monthly,M4,0.8308759757,3459
+"pass, first window",quarterly,M3,0.2129337539,634
+"pass, first window",quarterly,M4,0.7920997921,3367
+"pass, first window",monthly,all,0.7041406946,4492
+"pass, first window",quarterly,all,0.7003249188,4001
+"pass, series x window",all,all,0.7825267868,25479
+same result in the three windows,all,all,0.8218532909,8493
+"pass, first window, phi7 High",monthly,all,0.8911155645,1497
+"pass, first window, phi7 Low",monthly,all,0.5947930574,1498
+"pass, first window, phi7 Medium",monthly,all,0.6265865063,1497
+"pass, first window, phi7 High",quarterly,all,0.7443778111,1334
+"pass, first window, phi7 Low",quarterly,all,0.6604197901,1334
+"pass, first window, phi7 Medium",quarterly,all,0.6961740435,1333
