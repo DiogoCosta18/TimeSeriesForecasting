@@ -1,0 +1,221 @@
+table,cell,before,after,comparison,changed
+Table 4,ml | stl_ac,loss,loss,,False
+Table 4,ml | stl_sn,loss,loss,,False
+Table 4,neural | stl_ac,loss,loss,,False
+Table 4,neural | stl_sn,loss,loss,,False
+Table 4,statistical | stl_ac,loss,loss,,False
+Table 4,statistical | stl_sn,loss,loss,,False
+Table 4,transformer | stl_ac,loss,loss,,False
+Table 4,transformer | stl_sn,loss,loss,,False
+Table C2,monthly | ml | stl_ac,negligible,inconclusive,,True
+Table C2,monthly | ml | stl_sn,negligible,inconclusive,,True
+Table C2,monthly | neural | stl_ac,loss,loss,,False
+Table C2,monthly | neural | stl_sn,loss,loss,,False
+Table C2,monthly | statistical | stl_ac,loss,loss,,False
+Table C2,monthly | statistical | stl_sn,loss,loss,,False
+Table C2,monthly | transformer | stl_ac,loss,loss,,False
+Table C2,monthly | transformer | stl_sn,loss,loss,,False
+Table C2,quarterly | ml | stl_ac,loss,loss,,False
+Table C2,quarterly | ml | stl_sn,loss,loss,,False
+Table C2,quarterly | neural | stl_ac,loss,loss,,False
+Table C2,quarterly | neural | stl_sn,loss,loss,,False
+Table C2,quarterly | statistical | stl_ac,loss,loss,,False
+Table C2,quarterly | statistical | stl_sn,loss,loss,,False
+Table C2,quarterly | transformer | stl_ac,loss,loss,,False
+Table C2,quarterly | transformer | stl_sn,loss,loss,,False
+Table 8,ml | periodic,gain,gain,vs direct,False
+Table 8,ml | s25,negligible,positive,vs direct,True
+Table 8,neural | periodic,negligible,inconclusive,vs direct,True
+Table 8,neural | s25,loss,negative,vs direct,True
+Table 8,statistical | periodic,negligible,negligible,vs direct,False
+Table 8,statistical | s25,loss,loss,vs direct,False
+Table 8,transformer | periodic,negligible,inconclusive,vs direct,True
+Table 8,transformer | s25,negligible,inconclusive,vs direct,True
+Table 8,ml | periodic,gain,gain,vs default,False
+Table 8,ml | s25,gain,gain,vs default,False
+Table 8,neural | periodic,gain,gain,vs default,False
+Table 8,neural | s25,gain,gain,vs default,False
+Table 8,statistical | periodic,gain,gain,vs default,False
+Table 8,statistical | s25,gain,gain,vs default,False
+Table 8,transformer | periodic,gain,gain,vs default,False
+Table 8,transformer | s25,gain,gain,vs default,False
+Table C6,ARIMA | periodic,no evidence,negligible,,True
+Table C6,ARIMA | s25,loss,negative,,True
+Table C6,ETS | periodic,negligible,negligible,,False
+Table C6,ETS | s25,loss,loss,,False
+Table C6,LSTM | periodic,negligible,inconclusive,,True
+Table C6,LSTM | s25,loss,negative,,True
+Table C6,LinearRegression | periodic,gain,gain,,False
+Table C6,LinearRegression | s25,gain,positive,,True
+Table C6,NHITS | periodic,gain,positive,,True
+Table C6,NHITS | s25,negligible,inconclusive,,True
+Table C6,NLinear | periodic,loss,loss,,False
+Table C6,NLinear | s25,loss,loss,,False
+Table C6,PatchTST | periodic,no evidence,negligible,,True
+Table C6,PatchTST | s25,loss,loss,,False
+Table C6,RandomForest | periodic,negligible,negligible,,False
+Table C6,RandomForest | s25,no evidence,negligible,,True
+Table C6,Ridge | periodic,gain,gain,,False
+Table C6,Ridge | s25,gain,positive,,True
+Table C6,TFT | periodic,gain,inconclusive,,True
+Table C6,TFT | s25,no evidence,inconclusive,,True
+Table C6,XGBoost | periodic,negligible,negligible,,False
+Table C6,XGBoost | s25,negligible,negligible,,False
+Table 11,ml | direct,no evidence,negligible,,True
+Table 11,ml | stl_ac,negligible,negligible,,False
+Table 11,ml | stl_sn,no evidence,negligible,,True
+Table 11,neural | direct,loss,negative,,True
+Table 11,neural | stl_ac,negligible,negligible,,False
+Table 11,neural | stl_sn,negligible,negligible,,False
+Table 11,transformer | direct,loss,negative,,True
+Table 11,transformer | stl_ac,negligible,inconclusive,,True
+Table 11,transformer | stl_sn,negligible,inconclusive,,True
+Table 12,contrast | ml | direct,negligible,negligible,,False
+Table 12,contrast | ml | stl_ac,no evidence,negligible,,True
+Table 12,contrast | ml | stl_sn,no evidence,negligible,,True
+Table 12,contrast | neural | direct,negligible,inconclusive,,True
+Table 12,contrast | neural | stl_ac,negligible,negligible,,False
+Table 12,contrast | neural | stl_sn,no evidence,negligible,,True
+Table 12,contrast | transformer | direct,negligible,inconclusive,,True
+Table 12,contrast | transformer | stl_ac,negligible,inconclusive,,True
+Table 12,contrast | transformer | stl_sn,negligible,negligible,,False
+Table 12,delta_ft | ml | direct,no evidence,negligible,,True
+Table 12,delta_ft | ml | stl_ac,negligible,negligible,,False
+Table 12,delta_ft | ml | stl_sn,no evidence,negligible,,True
+Table 12,delta_ft | neural | direct,loss,inconclusive,,True
+Table 12,delta_ft | neural | stl_ac,negligible,inconclusive,,True
+Table 12,delta_ft | neural | stl_sn,negligible,negligible,,False
+Table 12,delta_ft | transformer | direct,loss,negative,,True
+Table 12,delta_ft | transformer | stl_ac,negligible,inconclusive,,True
+Table 12,delta_ft | transformer | stl_sn,negligible,inconclusive,,True
+Table 12,delta_rand | ml | direct,negligible,negligible,,False
+Table 12,delta_rand | ml | stl_ac,negligible,negligible,,False
+Table 12,delta_rand | ml | stl_sn,no evidence,negligible,,True
+Table 12,delta_rand | neural | direct,loss,negative,,True
+Table 12,delta_rand | neural | stl_ac,negligible,negligible,,False
+Table 12,delta_rand | neural | stl_sn,negligible,negligible,,False
+Table 12,delta_rand | transformer | direct,loss,negative,,True
+Table 12,delta_rand | transformer | stl_ac,negligible,negligible,,False
+Table 12,delta_rand | transformer | stl_sn,negligible,negligible,,False
+Table C4,ARIMA | stl_ac | period 1 vs direct,loss,loss,,False
+Table C4,ARIMA | stl_sn | period 1 vs direct,loss,loss,,False
+Table C4,ETS | stl_ac | period 1 vs direct,loss,loss,,False
+Table C4,ETS | stl_sn | period 1 vs direct,loss,loss,,False
+Table 5 (High - Low),feature_arch_stat | stl_ac,loss,loss,,False
+Table 5 (High - Low),feature_arch_stat | stl_sn,loss,inconclusive,,True
+Table 5 (High - Low),feature_evolving_seasonality | stl_ac,loss,loss,,False
+Table 5 (High - Low),feature_evolving_seasonality | stl_sn,loss,loss,,False
+Table 5 (High - Low),feature_non_normality | stl_ac,no evidence,inconclusive,,True
+Table 5 (High - Low),feature_non_normality | stl_sn,no evidence,inconclusive,,True
+Table 5 (High - Low),feature_spectral_entropy | stl_ac,no evidence,inconclusive,,True
+Table 5 (High - Low),feature_spectral_entropy | stl_sn,no evidence,inconclusive,,True
+Table 5 (High - Low),feature_structural_break_strength | stl_ac,no evidence,inconclusive,,True
+Table 5 (High - Low),feature_structural_break_strength | stl_sn,no evidence,inconclusive,,True
+Tables 7 and C5,default | stable | monthly | ml | ETS,loss,loss,,False
+Tables 7 and C5,default | stable | monthly | ml | NHITS,no evidence,inconclusive,,True
+Tables 7 and C5,default | stable | monthly | ml | PatchTST,loss,inconclusive,,True
+Tables 7 and C5,default | stable | monthly | neural | ETS,loss,loss,,False
+Tables 7 and C5,default | stable | monthly | neural | NHITS,no evidence,inconclusive,,True
+Tables 7 and C5,default | stable | monthly | neural | PatchTST,loss,negative,,True
+Tables 7 and C5,default | stable | monthly | transformer | ETS,loss,loss,,False
+Tables 7 and C5,default | stable | monthly | transformer | NHITS,no evidence,inconclusive,,True
+Tables 7 and C5,default | stable | monthly | transformer | PatchTST,loss,inconclusive,,True
+Tables 7 and C5,default | strong | monthly | ml | ETS,loss,loss,,False
+Tables 7 and C5,default | strong | monthly | ml | NHITS,no evidence,inconclusive,,True
+Tables 7 and C5,default | strong | monthly | ml | PatchTST,no evidence,inconclusive,,True
+Tables 7 and C5,default | strong | monthly | neural | ETS,loss,loss,,False
+Tables 7 and C5,default | strong | monthly | neural | NHITS,no evidence,inconclusive,,True
+Tables 7 and C5,default | strong | monthly | neural | PatchTST,loss,inconclusive,,True
+Tables 7 and C5,default | strong | monthly | transformer | ETS,loss,loss,,False
+Tables 7 and C5,default | strong | monthly | transformer | NHITS,no evidence,inconclusive,,True
+Tables 7 and C5,default | strong | monthly | transformer | PatchTST,no evidence,inconclusive,,True
+Tables 7 and C5,periodic | stable | monthly | ml | ETS,loss,loss,,False
+Tables 7 and C5,periodic | stable | monthly | ml | NHITS,no evidence,inconclusive,,True
+Tables 7 and C5,periodic | stable | monthly | ml | PatchTST,no evidence,inconclusive,,True
+Tables 7 and C5,periodic | stable | monthly | neural | ETS,loss,loss,,False
+Tables 7 and C5,periodic | stable | monthly | neural | NHITS,no evidence,inconclusive,,True
+Tables 7 and C5,periodic | stable | monthly | neural | PatchTST,no evidence,inconclusive,,True
+Tables 7 and C5,periodic | stable | monthly | transformer | ETS,loss,loss,,False
+Tables 7 and C5,periodic | stable | monthly | transformer | NHITS,no evidence,inconclusive,,True
+Tables 7 and C5,periodic | stable | monthly | transformer | PatchTST,no evidence,inconclusive,,True
+Tables 7 and C5,periodic | strong | monthly | ml | ETS,loss,negative,,True
+Tables 7 and C5,periodic | strong | monthly | ml | NHITS,no evidence,inconclusive,,True
+Tables 7 and C5,periodic | strong | monthly | ml | PatchTST,no evidence,inconclusive,,True
+Tables 7 and C5,periodic | strong | monthly | neural | ETS,loss,loss,,False
+Tables 7 and C5,periodic | strong | monthly | neural | NHITS,no evidence,inconclusive,,True
+Tables 7 and C5,periodic | strong | monthly | neural | PatchTST,no evidence,inconclusive,,True
+Tables 7 and C5,periodic | strong | monthly | transformer | ETS,loss,negative,,True
+Tables 7 and C5,periodic | strong | monthly | transformer | NHITS,no evidence,inconclusive,,True
+Tables 7 and C5,periodic | strong | monthly | transformer | PatchTST,no evidence,inconclusive,,True
+Tables 7 and C5,s25 | stable | monthly | ml | ETS,loss,loss,,False
+Tables 7 and C5,s25 | stable | monthly | ml | NHITS,no evidence,inconclusive,,True
+Tables 7 and C5,s25 | stable | monthly | ml | PatchTST,no evidence,inconclusive,,True
+Tables 7 and C5,s25 | stable | monthly | neural | ETS,loss,loss,,False
+Tables 7 and C5,s25 | stable | monthly | neural | NHITS,no evidence,inconclusive,,True
+Tables 7 and C5,s25 | stable | monthly | neural | PatchTST,no evidence,inconclusive,,True
+Tables 7 and C5,s25 | stable | monthly | transformer | ETS,loss,loss,,False
+Tables 7 and C5,s25 | stable | monthly | transformer | NHITS,no evidence,inconclusive,,True
+Tables 7 and C5,s25 | stable | monthly | transformer | PatchTST,no evidence,inconclusive,,True
+Tables 7 and C5,s25 | strong | monthly | ml | ETS,loss,negative,,True
+Tables 7 and C5,s25 | strong | monthly | ml | NHITS,no evidence,inconclusive,,True
+Tables 7 and C5,s25 | strong | monthly | ml | PatchTST,no evidence,inconclusive,,True
+Tables 7 and C5,s25 | strong | monthly | neural | ETS,loss,negative,,True
+Tables 7 and C5,s25 | strong | monthly | neural | NHITS,no evidence,inconclusive,,True
+Tables 7 and C5,s25 | strong | monthly | neural | PatchTST,no evidence,inconclusive,,True
+Tables 7 and C5,s25 | strong | monthly | transformer | ETS,loss,negative,,True
+Tables 7 and C5,s25 | strong | monthly | transformer | NHITS,negligible,inconclusive,,True
+Tables 7 and C5,s25 | strong | monthly | transformer | PatchTST,gain,inconclusive,,True
+Tables 7 and C5,default | stable | quarterly | ml | ETS,loss,loss,,False
+Tables 7 and C5,default | stable | quarterly | ml | NHITS,loss,negative,,True
+Tables 7 and C5,default | stable | quarterly | ml | PatchTST,loss,inconclusive,,True
+Tables 7 and C5,default | stable | quarterly | neural | ETS,loss,loss,,False
+Tables 7 and C5,default | stable | quarterly | neural | NHITS,loss,loss,,False
+Tables 7 and C5,default | stable | quarterly | neural | PatchTST,loss,loss,,False
+Tables 7 and C5,default | stable | quarterly | transformer | ETS,loss,loss,,False
+Tables 7 and C5,default | stable | quarterly | transformer | NHITS,loss,negative,,True
+Tables 7 and C5,default | stable | quarterly | transformer | PatchTST,loss,loss,,False
+Tables 7 and C5,periodic | stable | quarterly | ml | ETS,loss,inconclusive,,True
+Tables 7 and C5,periodic | stable | quarterly | ml | NHITS,no evidence,inconclusive,,True
+Tables 7 and C5,periodic | stable | quarterly | ml | PatchTST,no evidence,inconclusive,,True
+Tables 7 and C5,periodic | stable | quarterly | neural | ETS,loss,inconclusive,,True
+Tables 7 and C5,periodic | stable | quarterly | neural | NHITS,no evidence,inconclusive,,True
+Tables 7 and C5,periodic | stable | quarterly | neural | PatchTST,no evidence,inconclusive,,True
+Tables 7 and C5,periodic | stable | quarterly | transformer | ETS,loss,negative,,True
+Tables 7 and C5,periodic | stable | quarterly | transformer | NHITS,no evidence,inconclusive,,True
+Tables 7 and C5,periodic | stable | quarterly | transformer | PatchTST,no evidence,inconclusive,,True
+Tables 7 and C5,s25 | stable | quarterly | ml | ETS,loss,inconclusive,,True
+Tables 7 and C5,s25 | stable | quarterly | ml | NHITS,no evidence,inconclusive,,True
+Tables 7 and C5,s25 | stable | quarterly | ml | PatchTST,no evidence,inconclusive,,True
+Tables 7 and C5,s25 | stable | quarterly | neural | ETS,loss,inconclusive,,True
+Tables 7 and C5,s25 | stable | quarterly | neural | NHITS,no evidence,inconclusive,,True
+Tables 7 and C5,s25 | stable | quarterly | neural | PatchTST,no evidence,inconclusive,,True
+Tables 7 and C5,s25 | stable | quarterly | transformer | ETS,no evidence,inconclusive,,True
+Tables 7 and C5,s25 | stable | quarterly | transformer | NHITS,no evidence,inconclusive,,True
+Tables 7 and C5,s25 | stable | quarterly | transformer | PatchTST,no evidence,inconclusive,,True
+Tables 7 and C5,default | strong | quarterly | ml | ETS,loss,loss,,False
+Tables 7 and C5,default | strong | quarterly | ml | NHITS,loss,loss,,False
+Tables 7 and C5,default | strong | quarterly | ml | PatchTST,loss,negative,,True
+Tables 7 and C5,default | strong | quarterly | neural | ETS,loss,loss,,False
+Tables 7 and C5,default | strong | quarterly | neural | NHITS,loss,loss,,False
+Tables 7 and C5,default | strong | quarterly | neural | PatchTST,loss,loss,,False
+Tables 7 and C5,default | strong | quarterly | transformer | ETS,loss,loss,,False
+Tables 7 and C5,default | strong | quarterly | transformer | NHITS,loss,negative,,True
+Tables 7 and C5,default | strong | quarterly | transformer | PatchTST,loss,loss,,False
+Tables 7 and C5,periodic | strong | quarterly | ml | ETS,loss,loss,,False
+Tables 7 and C5,periodic | strong | quarterly | ml | NHITS,loss,negative,,True
+Tables 7 and C5,periodic | strong | quarterly | ml | PatchTST,loss,inconclusive,,True
+Tables 7 and C5,periodic | strong | quarterly | neural | ETS,loss,loss,,False
+Tables 7 and C5,periodic | strong | quarterly | neural | NHITS,no evidence,inconclusive,,True
+Tables 7 and C5,periodic | strong | quarterly | neural | PatchTST,negligible,inconclusive,,True
+Tables 7 and C5,periodic | strong | quarterly | transformer | ETS,loss,loss,,False
+Tables 7 and C5,periodic | strong | quarterly | transformer | NHITS,no evidence,inconclusive,,True
+Tables 7 and C5,periodic | strong | quarterly | transformer | PatchTST,no evidence,inconclusive,,True
+Tables 7 and C5,s25 | strong | quarterly | ml | ETS,loss,loss,,False
+Tables 7 and C5,s25 | strong | quarterly | ml | NHITS,loss,loss,,False
+Tables 7 and C5,s25 | strong | quarterly | ml | PatchTST,loss,inconclusive,,True
+Tables 7 and C5,s25 | strong | quarterly | neural | ETS,loss,negative,,True
+Tables 7 and C5,s25 | strong | quarterly | neural | NHITS,no evidence,inconclusive,,True
+Tables 7 and C5,s25 | strong | quarterly | neural | PatchTST,loss,inconclusive,,True
+Tables 7 and C5,s25 | strong | quarterly | transformer | ETS,loss,negative,,True
+Tables 7 and C5,s25 | strong | quarterly | transformer | NHITS,no evidence,inconclusive,,True
+Tables 7 and C5,s25 | strong | quarterly | transformer | PatchTST,no evidence,inconclusive,,True
