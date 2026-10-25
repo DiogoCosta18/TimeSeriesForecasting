@@ -1,0 +1,6 @@
+what,freq,share,n
+series decomposed in at least one window,monthly,0.8608637578,4492
+series decomposed in at least one window,quarterly,0.8907773057,4001
+series decomposed in at least one window,all,0.874955846,8493
+series never decomposed,all,0.125044154,8493
+series-window pairs decomposed,all,0.7825267868,25479

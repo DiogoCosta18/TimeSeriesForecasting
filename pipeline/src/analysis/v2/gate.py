@@ -123,14 +123,87 @@ def run(tables: Path, data_dir: Path, out: Path, workers: int) -> dict:
     return {"windows_checked": n_checked, **{k: len(v) for k, v in results.items()}}
 
 
+def acts(tables: Path, data_dir: Path, out: Path, workers: int) -> dict:
+    """Round 2: where the policy acts. Many series fail the test in every window, so their policy delta is exactly zero
+    and the median of Q7 sits on that atom. Q7p: the delta over the forecasts whose window passes the test (k = 24);
+    Q7m: the mean over series of the policy delta, zero where the test fails (k = 24); Q7bm: the same mean for the
+    best model of each policy against PatchTST Direct (k = 12); Q7r: the best re-tuned periodic STL-SN model of each
+    global family against PatchTST Direct and ETS Direct (k = 6); and the shares of series and windows decomposed."""
+    tables, out = Path(tables), Path(out)
+    fc, _, inst = load(tables)
+    gate = gate_table(windows(tables.parent, data_dir))
+    c = instances(main_seed(fc[(fc["scope"] == "cohort") & (fc["setting"] != "default_m") & (fc["scale"] == "raw")
+                               & fc["source"].isin(["run", "s3", "s4", "s6", "s7"])]), inst)
+    passes = gate.set_index(["series_id", "window"])["passes"]
+    parts = []
+    for strategy, setting in SETTINGS:
+        sub = c[c["model"].isin(s4.models_of(setting))]
+        d = contrast(sub, arm(sub), "direct/none", f"{strategy}/{setting}", ["strategy", "setting"], keep=True)
+        d["passes"] = passes.reindex(pd.MultiIndex.from_arrays([d["series_id"].astype(str), d["window"]])).to_numpy().astype(bool)
+        parts.append(d.assign(strategy=strategy, setting=setting))
+    d = pd.concat(parts, ignore_index=True)
+    d["gated"] = np.where(d["passes"], d["delta"], 0.0)
+    results = {}
+    X, labels = infer.instance_matrix(d[d["passes"]], inst, ["family", "strategy", "setting"])
+    results["Q7p"] = infer.summary(inst, X, labels, 24, "Q7p", workers)
+    X, labels = infer.instance_matrix(d, inst, ["family", "strategy", "setting"], value="gated")
+    results["Q7m"] = infer.summary(inst, X, labels, 24, "Q7m", workers, stat="mean")
+    # Q7bm: the policies of Q7b (their chosen models) by the mean
+    chosen = pd.read_csv(out.parent / "final" / "Q7b.csv")[["strategy", "setting", "policy", "model"]]
+    rank1 = c[(c["model"] == RANK1) & (c["strategy"] == "direct")][["series_id", "feature_sample", "window", "rn"]]
+    rank1 = rank1.astype({"series_id": str, "feature_sample": str})
+    jparts = []
+    for r in chosen.itertuples():
+        g = d[(d["strategy"] == r.strategy) & (d["setting"] == r.setting) & (d["model"] == r.model)]
+        rn = g["second"] if r.policy == "no test" else g["first"] - g["gated"]
+        b = g.assign(rn_policy=rn)[["series_id", "feature_sample", "window", "rn_policy"]].astype({"series_id": str, "feature_sample": str})
+        jj = b.merge(rank1, on=["series_id", "feature_sample", "window"], how="inner", validate="one_to_one")
+        jparts.append(jj.assign(delta=jj["rn"] - jj["rn_policy"], family="all", strategy=r.strategy, setting=r.setting,
+                                policy=r.policy, model=r.model))
+    X, labels = infer.instance_matrix(pd.concat(jparts, ignore_index=True), inst, ["strategy", "setting", "policy", "model"])
+    results["Q7bm"] = infer.summary(inst, X, labels, 12, "Q7bm", workers, stat="mean")
+    # Q7r: the re-tuned periodic STL-SN against the best Direct configurations
+    rt = c[(c["strategy"] == "stl_sn") & (c["setting"] == "periodic_tuned")]
+    distinct = rt[~rt.duplicated(["series_id", "window", "model"])]
+    rparts = []
+    for fam in ("ml", "neural", "transformer"):
+        g = distinct[distinct["family"] == fam]
+        best = g.groupby(g["model"].astype(str))["rn"].mean().idxmin()
+        b = rt[rt["model"] == best][["series_id", "feature_sample", "window", "rn"]].rename(columns={"rn": "rn_rt"})
+        b = b.astype({"series_id": str, "feature_sample": str})
+        for comp in ("PatchTST", "ETS"):
+            ref = c[(c["model"] == comp) & (c["strategy"] == "direct")][["series_id", "feature_sample", "window", "rn"]]
+            jj = b.merge(ref.astype({"series_id": str, "feature_sample": str}), on=["series_id", "feature_sample", "window"],
+                         how="inner", validate="one_to_one")
+            rparts.append(jj.assign(delta=jj["rn"] - jj["rn_rt"], family=fam, model=best, comparator=comp,
+                                    mean_rn=float(g[g["model"] == best]["rn"].mean())))
+    r = pd.concat(rparts, ignore_index=True)
+    X, labels = infer.instance_matrix(r, inst, ["family", "model", "comparator"])
+    results["Q7r"] = infer.summary(inst, X, labels, 6, "Q7r", workers).merge(
+        r.drop_duplicates(["family", "model", "comparator"])[["family", "model", "comparator", "mean_rn"]],
+        on=["family", "model", "comparator"], validate="one_to_one")
+    per = gate.groupby(["freq", "series_id"])["passes"].any().reset_index()
+    shares = [{"what": "series decomposed in at least one window", "freq": f, "share": g["passes"].mean(), "n": len(g)}
+              for f, g in per.groupby("freq")]
+    shares.append({"what": "series decomposed in at least one window", "freq": "all", "share": per["passes"].mean(), "n": len(per)})
+    shares.append({"what": "series never decomposed", "freq": "all", "share": 1 - per["passes"].mean(), "n": len(per)})
+    shares.append({"what": "series-window pairs decomposed", "freq": "all", "share": gate["passes"].mean(), "n": len(gate)})
+    results["gate_shares"] = pd.DataFrame(shares)
+    out.mkdir(parents=True, exist_ok=True)
+    for name, df in results.items():
+        df.to_csv(out / f"{name}.csv", index=False, float_format="%.10g")
+    return {k: len(v) for k, v in results.items()}
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m src.analysis.v2.gate", description=__doc__.splitlines()[0])
     parser.add_argument("--tables", required=True, type=Path)
     parser.add_argument("--data-dir", required=True, type=Path)
     parser.add_argument("--out", required=True, type=Path)
     parser.add_argument("--workers", type=int, default=1)
+    parser.add_argument("--acts", action="store_true", help="round 2: Q7p, Q7m, Q7bm, Q7r and the shares decomposed")
     a = parser.parse_args(argv)
-    print(run(a.tables, a.data_dir, a.out, a.workers))
+    print((acts if a.acts else run)(a.tables, a.data_dir, a.out, a.workers))
     return 0
 
 
