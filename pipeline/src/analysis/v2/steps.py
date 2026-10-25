@@ -74,7 +74,7 @@ def _files(run_dir: Path):
 
 def horizon(tables: Path, inst: pd.DataFrame, workers: int) -> pd.DataFrame:
     run_dir = Path(tables).parent
-    b = pd.concat([blocks(r, s) for r, s in _files(run_dir)], ignore_index=True)
+    b = pd.concat([blocks(r, s) for r, s in _files(run_dir) if len(r)], ignore_index=True)   # SARIMA's files are empty here
     c = instances(b.assign(source="steps", dataset=b["series_id"].str.split("_").str[0], pool_id="", bucket=None,
                            scale="raw", mae=np.nan, mae_naive=np.nan), inst)
     a = c["strategy"].astype(str) + "/" + c["setting"].astype(str) + "/" + c["block"].astype(str)
