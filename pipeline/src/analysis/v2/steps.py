@@ -117,8 +117,8 @@ def ensemble(tables: Path, inst: pd.DataFrame, workers: int) -> pd.DataFrame:
         raise ValueError("a stochastic forecast without its three seeds")
     ens = rows.groupby(keys, sort=False).agg(y_test=("y_test", "first"), yhat_naive=("yhat_naive", "first"),
                                              yhat=("yhat", lambda v: list(np.mean(np.stack(v.to_numpy()), axis=0)))).reset_index()
-    yt, yh, yn = (np.stack(ens[c].to_numpy()) for c in ("y_test", "yhat", "yhat_naive"))
-    rn = np.minimum(np.abs(yt - yh).mean(axis=1) / (np.abs(yt - yn).mean(axis=1) + RELNAIVE_EPS), CAP)
+    rn = np.array([min(np.mean(np.abs(np.asarray(t) - np.asarray(f))) / (np.mean(np.abs(np.asarray(t) - np.asarray(n))) + RELNAIVE_EPS), CAP)
+                   for t, f, n in zip(ens["y_test"], ens["yhat"], ens["yhat_naive"])])     # horizons differ by frequency
     e = pd.DataFrame({"series_id": ens["unique_id"], "freq": ens["frequency"], "feature_sample": SEED_CHECK_FEATURE,
                       "window": ens["window"], "family": ens["family"], "model": ens["model"], "strategy": ens["strategy"],
                       "setting": ens["setting"], "scope": "cohort", "group": "none", "seed": 0, "rn": rn})
