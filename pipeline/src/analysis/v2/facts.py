@@ -61,6 +61,8 @@ def run(tables: Path, out: Path) -> pd.DataFrame:
         medians.append(s.groupby(level=["family", "strategy"], observed=True).median().rename(sd))
     m = pd.concat(medians, axis=1)
     f["v2-thr-seed-spread"] = float((m.max(axis=1) - m.min(axis=1)).median())
+    out.mkdir(parents=True, exist_ok=True)
+    m.reset_index().to_csv(out / "seed_medians.csv", index=False, float_format="%.10g")
     f["v2-mean-instances-per-series"] = len(inst) / inst["series_id"].nunique()
     configs = json.loads((run_dir / "configs_frozen.json").read_text(encoding="utf-8"))["entries"]
     alphas = [e["params"]["alpha"] for k, e in configs.items() if k.startswith("Ridge|")]
