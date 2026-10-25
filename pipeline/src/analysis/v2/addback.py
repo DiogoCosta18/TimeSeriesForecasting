@@ -101,13 +101,71 @@ def run(tables: Path, data_dir: Path, out: Path, workers: int) -> pd.DataFrame:
     return q11
 
 
+def stored_sn_periodic(run_dir: Path) -> pd.DataFrame:
+    """S4's periodic STL-SN forecasts: the global models with the run's configurations, ARIMA and ETS with season length 1."""
+    from src.stages import sensitivity4 as s4
+
+    cols = ["unique_id", "feature_name", "frequency", "window", "family", "model", "seed", "y_test", "yhat"]
+    prepare = run_dir / "prepare"
+    tasks = [t for t in s4.eval_tasks(pd.read_parquet(prepare / "bucket_summary.parquet"), pd.read_parquet(prepare / "samples.parquet"))
+             if (t["task_id"].startswith("s4eval|") and t["variant"] == "periodic" and t["entry"] == s4.RUN_ENTRY)
+             or (t["task_id"].startswith("s4stat|") and t["variant"] == "periodic_p1")]
+    rows, facts = s1._s1_rows(run_dir, tasks, s4.ROOT, cols)
+    if facts["missing"] or facts["changed"]:
+        raise ValueError("S4's periodic rows are missing or changed")
+    return rows
+
+
+def crossing(tables: Path, data_dir: Path, out: Path, workers: int) -> pd.DataFrame:
+    """Round 2, the 2 x 2 crossing of the add-back. Each stored STL-SN forecast is N + S_last, so N = forecast - S_last,
+    with S_last the last cycle of the setting's own STL (refitted, deterministic). Crossing the non-seasonal forecast N
+    of the default and the periodic setting with the repeated cycle S_last of either gives two new forecasts; Q26
+    (k = 12) is, per family, the default add-back minus each of (default N, periodic S), (periodic N, default S) and
+    (periodic N, periodic S), positive values meaning the change helps."""
+    tables, out = Path(tables), Path(out)
+    _, _, inst = load(tables, ["run"])
+    run_dir = tables.parent
+    win = windows(run_dir, data_dir)
+    last, naive = {}, {}
+    for s, w, y, yt, m, h in zip(win["series_id"], win["window"], win["y_train"], win["y_test"], win["m"], win["h"]):
+        last[(s, int(w))] = {x: rv.seasonal_naive(component_targets(y, m, x)["seasonal"], m, h) for x in ("default", "periodic")}
+        naive[(s, int(w))] = np.mean(np.abs(yt - rv.seasonal_naive(y, m, h))) + RELNAIVE_EPS
+    keys = ["unique_id", "feature_name", "frequency", "window", "model"]
+    d = stored_sn(run_dir).assign(feature_name=lambda x: x["feature_name"].fillna("none"))
+    p = stored_sn_periodic(run_dir).assign(feature_name=lambda x: x["feature_name"].fillna("none"))
+    j = d.merge(p[keys + ["yhat"]], on=keys, suffixes=("_d", "_p"), validate="one_to_one")
+    if len(j) != len(d):
+        raise ValueError(f"{len(d) - len(j)} default forecasts without a periodic twin")
+    rows = []
+    for r in j.itertuples(index=False):
+        sd, sp = last[(r.unique_id, int(r.window))]["default"], last[(r.unique_id, int(r.window))]["periodic"]
+        yt, nd, npd = np.asarray(r.y_test), np.asarray(r.yhat_d) - sd, np.asarray(r.yhat_p) - sp
+        rn = {k: min(np.mean(np.abs(yt - f)) / naive[(r.unique_id, int(r.window))], rv.CAP)
+              for k, f in (("dd", nd + sd), ("dp", nd + sp), ("pd", npd + sd), ("pp", npd + sp))}
+        for change, k in (("periodic S", "dp"), ("periodic N", "pd"), ("both", "pp")):
+            rows.append((r.unique_id, r.frequency, r.feature_name, int(r.window), r.family, r.model, change, rn["dd"] - rn[k]))
+    df = pd.DataFrame(rows, columns=["series_id", "freq", "feature_sample", "window", "family", "model", "change", "delta"])
+    stat = df["feature_sample"] == "none"
+    views = df[stat].drop(columns="feature_sample").merge(inst[["series_id", "freq", "feature_sample"]], on=["series_id", "freq"])
+    df = pd.concat([df[~stat], views[df.columns]], ignore_index=True)
+    X, labels = infer.instance_matrix(df, inst, ["family", "change"])
+    q26 = infer.summary(inst, X, labels, 12, "Q26", workers)
+    out.mkdir(parents=True, exist_ok=True)
+    q26.to_csv(out / "Q26.csv", index=False, float_format="%.10g")
+    return q26
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m src.analysis.v2.addback", description=__doc__.splitlines()[0])
     parser.add_argument("--tables", required=True, type=Path)
     parser.add_argument("--data-dir", required=True, type=Path)
     parser.add_argument("--out", required=True, type=Path)
     parser.add_argument("--workers", type=int, default=1)
+    parser.add_argument("--crossing", action="store_true", help="round 2: the 2 x 2 crossing of N and S (Q26)")
     a = parser.parse_args(argv)
+    if a.crossing:
+        print(crossing(a.tables, a.data_dir, a.out, a.workers)[["family", "change", "estimate", "label"]].to_string(index=False))
+        return 0
     print(run(a.tables, a.data_dir, a.out, a.workers)[["family", "k", "comparison", "estimate", "label"]].to_string(index=False))
     return 0
 
