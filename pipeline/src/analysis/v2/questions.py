@@ -371,8 +371,47 @@ def q10(fc, inst, workers):
     return infer.summary(inst, X, labels, 24, "Q10", workers)
 
 
+def q24(fc, inst, workers):
+    """Round 2: the gap of Section 4.2, non-linear minus linear Delta_FT per strategy (families pooled with equal
+    weight within each type, as H6), with simultaneous intervals over the three strategies; k = 3."""
+    from src.forecast.registry import LINEARITY
+
+    d = pool_contrasts(fc, inst)
+    d = d[d["quantity"] == "delta_ft"]
+    d = d.assign(linearity=d["model"].astype(str).map(LINEARITY))
+    v = (d.groupby(["series_id", "feature_sample", "strategy", "linearity", "family"], observed=True)["delta"].mean()
+         .groupby(level=["series_id", "feature_sample", "strategy", "linearity"], observed=True).mean().unstack("linearity"))
+    g = (v["nonlinear"] - v["linear"]).rename("delta").reset_index().assign(family="all")
+    X, labels = infer.instance_matrix(g, inst, ["strategy"])
+    return infer.summary(inst, X, labels, 3, "Q24", workers)
+
+
+def q25(fc, inst, workers):
+    """Round 2: the per-seed cells of Tables C3 and C7 with the labels of the revision (one pool per frequency on the
+    evolving-seasonality sample, so the series are resampled); k = 36 (C3: 8 cells x 3 seeds; C7: 4 x 3)."""
+    ev = raw(fc[(fc["scope"] == "cohort") & fc["feature_sample"].isin([SEED_CHECK_FEATURE, "none"])])
+    c3 = ev[(ev["setting"] != "default_m") & ev["source"].isin(["run", "s3"])]
+    direct = (ev["strategy"] == "direct") & (ev["source"] == "run")
+    c7 = ev[direct | ((ev["setting"] == "periodic") & (ev["strategy"] == "stl_sn") & ev["source"].isin(["s4", "s4s"]))]
+    sub = inst[inst["feature_sample"] == SEED_CHECK_FEATURE].reset_index(drop=True)
+    parts = []
+    for sd in SEEDS:
+        v = instances(seed_view(c3, sd), inst)
+        parts.append(stl_contrasts(v[v["feature_sample"] == SEED_CHECK_FEATURE]).assign(table="C3", seed=sd))
+        v = instances(seed_view(c7, sd), inst)
+        v = v[v["feature_sample"] == SEED_CHECK_FEATURE]
+        parts.append(contrast(v, v["strategy"].astype(str), "direct", "stl_sn", ["strategy", "setting"])
+                     .assign(strategy="stl_sn_periodic", table="C7", seed=sd))
+    d = pd.concat(parts, ignore_index=True).rename(columns={"seed": "run_seed"})
+    d = d.assign(seed_cell=d["run_seed"].astype(str))
+    X, labels = infer.instance_matrix(d, sub, ["table", "family", "strategy", "seed_cell"])
+    if X.shape[1] != 36:
+        raise ValueError(f"Q25 has {X.shape[1]} cells, expected 36")
+    return infer.summary(sub, X, labels, 36, "Q25", workers)
+
+
 QUESTIONS = {"Q1": q1, "Q2": q2, "Q6": q6, "Q14": q14, "Q16": q16, "C4": c4, "Q3Q4": q3q4, "Q5": q5, "Q13": q13,
-             "Q6c": q6c, "Q8": q8, "Q10": q10}
+             "Q6c": q6c, "Q8": q8, "Q10": q10, "Q24": q24, "Q25": q25}
 NEEDS_TABLES = {"Q16", "Q5"}
 
 
