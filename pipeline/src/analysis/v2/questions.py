@@ -8,6 +8,13 @@
     Q14  Tables C3 and C7: the estimand over all seeds (seeds, then series, resampled)     k = 16
     Q16  Table 5: High minus Low per feature and strategy                                  k = 12
     C4   Table C4: period 1 and period m of ARIMA and ETS                                  k = 12
+    Q3   Table 8 (families): settings, STL-SN and STL-AC; E2's re-tuning                   k = 48
+    Q4   Table C6 (models): the same per model                                             k = 84
+    Q5   Tables 7 and C5: the best STL-SN model against the best Direct configurations     k = 108
+    Q8   E3: the log scale for ARIMA and ETS                                               k = 27
+    Q10  E1: the mechanism, variant (ii)                                                   k = 24
+    Q13  A9: the families without linear regression and without NLinear                   k = 12
+    Q6c  A10: Table 12 on the evolving-seasonality pools                                   k = 39
 
 Run:  python -m src.analysis.v2.questions --tables TABLES --out OUT [--only Q1,Q2] [--workers N]
 """
@@ -122,13 +129,19 @@ def _seed_cell(args):
 def q14(fc, inst, workers):
     """Tables C3 and C7, the estimand over all seeds: per series, the mean of its deltas under the three seeds,
     then the median; seeds and then series resampled (rv.seed_bootstrap). k = 16 counts E1b's four cells."""
-    ev = fc[(fc["scope"] == "cohort") & fc["feature_sample"].isin([SEED_CHECK_FEATURE, "none"])]
+    ev = raw(fc[(fc["scope"] == "cohort") & fc["feature_sample"].isin([SEED_CHECK_FEATURE, "none"])])
     c3 = ev[(ev["setting"] != "default_m") & ev["source"].isin(["run", "s3"])]
-    c7 = ev[((ev["strategy"] == "direct") & (ev["source"] == "run")) | ((ev["setting"] == "periodic") & ev["source"].isin(["s4", "s4s"]))]
+    direct = (ev["strategy"] == "direct") & (ev["source"] == "run")
+    c7 = ev[direct | ((ev["setting"] == "periodic") & (ev["strategy"] == "stl_sn") & ev["source"].isin(["s4", "s4s"]))]
+    c7ac = ev[direct | ((ev["setting"] == "periodic") & (ev["strategy"] == "stl_ac") & (ev["source"] == "s6"))]
+
+    def periodic(strategy):
+        return lambda c: contrast(c, c["strategy"].astype(str), "direct", strategy, ["strategy", "setting"]).assign(
+            strategy=f"{strategy}_periodic")
+
     per_seed = []
-    for table, base, contrasts in [("C3", c3, lambda c: stl_contrasts(c)),
-                                   ("C7", c7, lambda c: contrast(c, c["strategy"].astype(str), "direct", "stl_sn",
-                                                                 ["strategy", "setting"]).assign(strategy="stl_sn_periodic"))]:
+    for table, base, contrasts in [("C3", c3, lambda c: stl_contrasts(c)), ("C7", c7, periodic("stl_sn")),
+                                   ("C7", c7ac, periodic("stl_ac"))]:
         for sd in SEEDS:
             v = instances(seed_view(base, sd), inst)
             d = contrasts(v[v["feature_sample"] == SEED_CHECK_FEATURE])
@@ -179,41 +192,65 @@ def c4(fc, inst, workers):
     return infer.summary(inst, X, labels, 12, "C4", workers)
 
 
+def raw(fc: pd.DataFrame) -> pd.DataFrame:
+    """The forecasts on the original scale (E3's log-scale forecasts are Q8's alone)."""
+    return fc[fc["scale"] == "raw"]
+
+
+def retuned(c: pd.DataFrame) -> pd.DataFrame:
+    """E2's arm, setting periodic_rt: the global models re-tuned for periodic STL-SN (S4's three and S7's six;
+    setting periodic_tuned) and ARIMA and ETS under periodic STL-SN, which have no configuration to tune."""
+    g = c[(c["strategy"] == "stl_sn") & (c["setting"] == "periodic_tuned")]
+    s = c[(c["strategy"] == "stl_sn") & (c["setting"] == "periodic") & (c["family"] == "statistical")]
+    rt = pd.concat([g, s], ignore_index=True).assign(setting="periodic_rt")
+    out = pd.concat([c.astype({"setting": str}), rt.astype({"setting": str})], ignore_index=True)
+    out["setting"] = out["setting"].astype("category")
+    return out
+
+
 def setting_contrasts(fc: pd.DataFrame, inst: pd.DataFrame) -> pd.DataFrame:
-    """STL-SN under each setting against Direct and against the default (S4's models of each setting), and the
-    re-tuned periodic arm against the frozen one; ``setting`` and ``comparison`` name the cell."""
-    c = instances(main_seed(fc[(fc["scope"] == "cohort") & (fc["setting"] != "default_m")
-                               & fc["source"].isin(["run", "s3", "s4"])]), inst)
+    """STL-SN and STL-AC under each setting against Direct and against the same strategy with the default (S4's
+    and E1's models of each setting), E2's re-tuned periodic STL-SN against Direct and against the frozen periodic
+    arm, and S4's re-tuning of three models (A12); ``strategy``, ``setting`` and ``comparison`` name the cell."""
+    c = instances(main_seed(raw(fc[(fc["scope"] == "cohort") & (fc["setting"] != "default_m")
+                                   & fc["source"].isin(["run", "s3", "s4", "s6", "s7"])])), inst)
     parts = []
-    for label in ["default", "periodic", "s25"]:
-        sub = c[c["model"].isin(s4.models_of(label))]
-        a = arm(sub)
-        parts.append(contrast(sub, a, "direct/none", f"stl_sn/{label}", ["strategy", "setting"])
-                     .assign(setting=label, comparison="vs direct"))
-        if label != "default":
-            parts.append(contrast(sub, a, "stl_sn/default", f"stl_sn/{label}", ["strategy", "setting"])
-                         .assign(setting=label, comparison="vs default"))
-    sub = c[c["model"].isin(s4.models_of("periodic_tuned"))]
+    for strategy in ["stl_sn", "stl_ac"]:
+        for label in ["default", "periodic", "s25"]:
+            sub = c[c["model"].isin(s4.models_of(label))]
+            a = arm(sub)
+            parts.append(contrast(sub, a, "direct/none", f"{strategy}/{label}", ["strategy", "setting"])
+                         .assign(strategy=strategy, setting=label, comparison="vs direct"))
+            if label != "default":
+                parts.append(contrast(sub, a, f"{strategy}/default", f"{strategy}/{label}", ["strategy", "setting"])
+                             .assign(strategy=strategy, setting=label, comparison="vs default"))
+    rt = retuned(c[c["model"].isin(s4.models_of("periodic"))])
+    a = arm(rt)
+    for first, comparison in (("direct/none", "vs direct"), ("stl_sn/periodic", "vs periodic")):
+        parts.append(contrast(rt, a, first, "stl_sn/periodic_rt", ["strategy", "setting"])
+                     .assign(strategy="stl_sn", setting="periodic_rt", comparison=comparison))
+    sub = c[c["model"].isin(s4.models_of("periodic_tuned")) & c["source"].isin(["run", "s4"])]
     parts.append(contrast(sub, arm(sub), "stl_sn/periodic", "stl_sn/periodic_tuned", ["strategy", "setting"])
-                 .assign(setting="periodic_tuned", comparison="vs periodic"))
-    return pd.concat(parts, ignore_index=True).assign(strategy="stl_sn")
+                 .assign(strategy="stl_sn", setting="periodic_tuned", comparison="vs periodic"))
+    return pd.concat(parts, ignore_index=True)
 
 
 def q3q4(fc, inst, workers):
-    """The cells of Q3 (families; k = 48) and Q4 (models; k = 84) that the frozen forecasts give: STL-SN periodic
-    and span 25 against Direct and the default (Q3), STL-SN under the three settings against Direct (Q4). The
-    other cells (STL-AC, E1; re-tuned, E2) come from the same resamples later. A12: S4's re-tuning of three
-    models, re-tuned minus frozen periodic, k = 3."""
+    """Q3 (families; k = 48): STL-SN and STL-AC periodic and span 25 against Direct and the default, and E2's
+    re-tuned STL-SN against Direct and the frozen periodic arm (40 cells; E2b's 8 did not run). Q4 (models;
+    k = 84): STL-SN and STL-AC under the three settings against Direct and E2's re-tuned STL-SN of the nine global
+    models (75 cells). A12: S4's re-tuning of three models, re-tuned minus frozen periodic, k = 3."""
     d = setting_contrasts(fc, inst)
-    fam = d[d["setting"].isin(["periodic", "s25"])]
+    fam = d[d["setting"] != "default"]
+    fam = fam[fam["setting"] != "periodic_tuned"]
     X, labels = infer.instance_matrix(fam, inst, ["family", "strategy", "setting", "comparison"])
     q3 = infer.summary(inst, X, labels, 48, "Q3", workers)
-    mod = d[d["comparison"] == "vs direct"]
+    mod = d[(d["comparison"] == "vs direct") & ~((d["setting"] == "periodic_rt") & (d["family"] == "statistical"))]
     X, labels = infer.instance_matrix(mod, inst, ["model", "strategy", "setting", "comparison"])
     q4 = infer.summary(inst, X, labels, 84, "Q4", workers)
     X, labels = infer.instance_matrix(d[d["setting"] == "periodic_tuned"], inst, ["model", "setting", "comparison"])
     a12 = infer.summary(inst, X, labels, 3, "A12", workers)
-    for name, df, n in (("Q3", q3, 16), ("Q4", q4, 33), ("A12", a12, 3)):
+    for name, df, n in (("Q3", q3, 40), ("Q4", q4, 75), ("A12", a12, 3)):
         if len(df) != n:
             raise ValueError(f"{name} has {len(df)} cells, expected {n}")
     return {"Q3": q3, "Q4": q4, "A12": a12}
@@ -266,13 +303,13 @@ SUBFAMILIES = {"ml-3": ["Ridge", "XGBoost", "RandomForest"], "neural-2": ["NHITS
 
 def q13(fc, inst, workers):
     """A9: the machine learning family without linear regression and the neural family without NLinear, Direct
-    minus STL-SN under the three settings and minus STL-AC (default; periodic and span 25 come from E1); k = 12."""
-    c = instances(main_seed(fc[(fc["scope"] == "cohort") & (fc["source"].isin(["run", "s4"]))]), inst)
+    minus STL-SN and STL-AC under the three settings; k = 12."""
+    c = instances(main_seed(raw(fc[(fc["scope"] == "cohort") & (fc["source"].isin(["run", "s4", "s6"]))])), inst)
     parts = []
     for name, models in SUBFAMILIES.items():
         sub = c[c["model"].isin(models)]
         a = arm(sub)
-        for strategy, setting in [("stl_sn", "default"), ("stl_sn", "periodic"), ("stl_sn", "s25"), ("stl_ac", "default")]:
+        for strategy, setting in [(s, x) for s in ("stl_sn", "stl_ac") for x in ("default", "periodic", "s25")]:
             parts.append(contrast(sub, a, "direct/none", f"{strategy}/{setting}", ["strategy", "setting"])
                          .assign(subfamily=name, strategy=strategy, setting=setting))
     X, labels = infer.instance_matrix(pd.concat(parts, ignore_index=True), inst, ["subfamily", "strategy", "setting"])
@@ -291,8 +328,51 @@ def q6c(fc, inst, workers):
     return infer.summary(sub, X, labels, 39, "Q6c", workers)
 
 
+def q8(fc, inst, workers):
+    """E3: ARIMA and ETS on the log scale. STL-SN and STL-AC on log(y) (default and periodic STL) against the
+    frozen Direct on the raw series and against Direct on log(y), and Direct on log(y) against Direct on the raw
+    series; per model and for the two together (the statistical family); k = 27."""
+    c = main_seed(fc[(fc["scope"] == "cohort") & fc["model"].isin(["ARIMA", "ETS"])
+                     & (((fc["source"] == "run") & (fc["strategy"] == "direct")) | ((fc["source"] == "s6") & (fc["scale"] == "log")))])
+    c = instances(c, inst)
+    a = (arm(c) + "/" + c["scale"].astype(str)).to_numpy()
+    vary = ["strategy", "setting"]
+    parts = []
+    for s in ("stl_sn", "stl_ac"):
+        for setting in ("default", "periodic"):
+            for first, comparison in (("direct/none/raw", "vs direct raw"), ("direct/none/log", "vs direct log")):
+                parts.append(contrast(c, a, first, f"{s}/{setting}/log", vary).assign(strategy=f"{s}_log", setting=setting,
+                                                                                    comparison=comparison))
+    parts.append(contrast(c, a, "direct/none/raw", "direct/none/log", vary).assign(strategy="direct_log", setting="none",
+                                                                                 comparison="vs direct raw"))
+    d = pd.concat(parts, ignore_index=True)
+    d = pd.concat([d, d.assign(model="ARIMA+ETS")], ignore_index=True)
+    X, labels = infer.instance_matrix(d, inst, ["model", "strategy", "setting", "comparison"])
+    if X.shape[1] != 27:
+        raise ValueError(f"Q8 has {X.shape[1]} cells, expected 27")
+    return infer.summary(inst, X, labels, 27, "Q8", workers)
+
+
+def q10(fc, inst, workers):
+    """E1, the mechanism: per family and setting (periodic and span 25; the default's component forecasts were
+    not stored), the cost of modelling S instead of repeating its last cycle (RN_AC - RN_ii) and the cost of
+    modelling T and R apart (RN_ii - RN_SN), positive values a cost; k = 24 counts the default's cells."""
+    c = instances(main_seed(raw(fc[(fc["scope"] == "cohort") & fc["source"].isin(["s4", "s6"])
+                                   & fc["setting"].isin(["periodic", "s25"])])), inst)
+    a = arm(c)
+    parts = []
+    for setting in ("periodic", "s25"):
+        for first, second, parcel in ((f"stl_ac/{setting}", f"stl_ac_ii/{setting}", "model S"),
+                                      (f"stl_ac_ii/{setting}", f"stl_sn/{setting}", "split T and R")):
+            parts.append(contrast(c, a, first, second, ["strategy", "setting"]).assign(setting=setting, parcel=parcel))
+    X, labels = infer.instance_matrix(pd.concat(parts, ignore_index=True), inst, ["family", "setting", "parcel"])
+    if X.shape[1] != 16:
+        raise ValueError(f"Q10 has {X.shape[1]} cells, expected 16")
+    return infer.summary(inst, X, labels, 24, "Q10", workers)
+
+
 QUESTIONS = {"Q1": q1, "Q2": q2, "Q6": q6, "Q14": q14, "Q16": q16, "C4": c4, "Q3Q4": q3q4, "Q5": q5, "Q13": q13,
-             "Q6c": q6c}
+             "Q6c": q6c, "Q8": q8, "Q10": q10}
 NEEDS_TABLES = {"Q16", "Q5"}
 
 

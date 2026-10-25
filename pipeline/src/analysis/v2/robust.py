@@ -26,14 +26,14 @@ from src.analysis.v2.a0 import arm, contrast, main_seed
 from src.analysis.v2.tables import instances, load, windows
 from src.stages import sensitivity4 as s4
 
-CELLS = [("stl_sn", "default"), ("stl_ac", "default"), ("stl_sn", "periodic")]
+CELLS = [("stl_sn", "default"), ("stl_ac", "default"), ("stl_sn", "periodic"), ("stl_ac", "periodic")]
 THRESHOLDS = (0.005, 0.02)
 
 
 def paired(fc: pd.DataFrame, inst: pd.DataFrame) -> pd.DataFrame:
     """Direct against each STL cell, per forecast, with the two MAEs and the seasonal naive MAE."""
-    c = instances(main_seed(fc[(fc["scope"] == "cohort") & (fc["setting"] != "default_m")
-                               & fc["source"].isin(["run", "s3", "s4"])]), inst)
+    c = instances(main_seed(fc[(fc["scope"] == "cohort") & (fc["setting"] != "default_m") & (fc["scale"] == "raw")
+                               & fc["source"].isin(["run", "s3", "s4", "s6"])]), inst)
     parts = []
     for strategy, setting in CELLS:
         sub = c[c["model"].isin(s4.models_of(setting))]

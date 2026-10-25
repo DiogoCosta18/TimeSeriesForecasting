@@ -7,7 +7,7 @@ seasonality (N, A, M) chosen in at least two of the three windows, "mixed" other
 
 Outputs in OUT: ``ets_spec.csv`` (series, window, components, check), ``ets_types.csv`` (shares by frequency and
 dataset) and Q9: Delta_STL of the statistical family (ARIMA and ETS) in the N, A and M strata, for STL-SN and
-STL-AC under the default and periodic settings (k = 12; STL-AC periodic comes from E1), with the mixed stratum
+STL-AC under the default and periodic settings (k = 12; STL-AC periodic from E1), with the mixed stratum
 described if it has at least 30 series.
 
 Run:  python -m src.analysis.v2.ets_season --tables TABLES --data-dir DATA --out OUT [--workers N]
@@ -27,7 +27,7 @@ from src.analysis.v2.tables import instances, load, windows
 
 TOLERANCE = 1e-6
 MAX_OFF = 0.001
-CELLS = [("stl_sn", "default"), ("stl_ac", "default"), ("stl_sn", "periodic")]
+CELLS = [("stl_sn", "default"), ("stl_ac", "default"), ("stl_sn", "periodic"), ("stl_ac", "periodic")]
 
 
 def _fit(rows: list[tuple]) -> list[dict]:
@@ -90,7 +90,8 @@ def run(tables: Path, data_dir: Path, out: Path, workers: int) -> dict:
     shares.to_csv(out / "ets_types.csv", index=False, float_format="%.10g")
 
     c = instances(main_seed(fc[(fc["scope"] == "cohort") & (fc["family"] == "statistical") & fc["model"].isin(["ARIMA", "ETS"])
-                               & (fc["setting"] != "default_m") & fc["source"].isin(["run", "s3", "s4"])]), inst)
+                               & (fc["setting"] != "default_m") & (fc["scale"] == "raw")
+                               & fc["source"].isin(["run", "s3", "s4", "s6"])]), inst)
     a = arm(c)
     d = pd.concat([contrast(c, a, "direct/none", f"{s}/{setting}", ["strategy", "setting"]).assign(strategy=s, setting=setting)
                    for s, setting in CELLS], ignore_index=True)

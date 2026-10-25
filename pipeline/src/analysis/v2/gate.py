@@ -4,8 +4,8 @@ benchmarks, rv.seasonality_test), on the raw training part of each window; Direc
 Outputs in OUT: ``gate.csv`` (series_id, freq, window, passes), ``gate_description.csv``, and the questions
 Q7c (Delta_STL of the default setting on the series that pass and fail in the first window; k = 16), Q7 (the
 gated policy against Direct, per family and setting; k = 24) and Q7b (the best model of each policy, with and
-without the test, against the best Direct configuration; k = 12). The STL-AC cells under the periodic and
-span-25 settings come from E1 and draw the same resamples later.
+without the test, against the best Direct configuration; k = 12), STL-AC under the periodic and span-25 settings
+from E1.
 
 Run:  python -m src.analysis.v2.gate --tables TABLES --data-dir DATA --out OUT [--workers N]
 """
@@ -24,7 +24,7 @@ from src.analysis.v2.a0 import arm, contrast, main_seed
 from src.analysis.v2.tables import E7, RELNAIVE_EPS, instances, load, windows
 from src.stages import sensitivity4 as s4
 
-SETTINGS = [("stl_sn", "default"), ("stl_sn", "periodic"), ("stl_sn", "s25"), ("stl_ac", "default")]
+SETTINGS = [(s, x) for s in ("stl_sn", "stl_ac") for x in ("default", "periodic", "s25")]
 RANK1 = "PatchTST"                      # rank1-config: PatchTST Direct
 
 
@@ -73,8 +73,8 @@ def run(tables: Path, data_dir: Path, out: Path, workers: int) -> dict:
     gate.to_csv(out / "gate.csv", index=False)
     describe(gate, x).to_csv(out / "gate_description.csv", index=False, float_format="%.10g")
 
-    c = instances(main_seed(fc[(fc["scope"] == "cohort") & (fc["setting"] != "default_m")
-                               & fc["source"].isin(["run", "s3", "s4"])]), inst)
+    c = instances(main_seed(fc[(fc["scope"] == "cohort") & (fc["setting"] != "default_m") & (fc["scale"] == "raw")
+                               & fc["source"].isin(["run", "s3", "s4", "s6"])]), inst)
     passes = gate.set_index(["series_id", "window"])["passes"]
     first = gate[gate["window"] == 0].set_index("series_id")["passes"]
     parts = []
