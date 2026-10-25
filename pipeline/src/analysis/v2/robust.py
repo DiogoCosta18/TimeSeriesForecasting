@@ -87,13 +87,15 @@ def spread(d: pd.DataFrame) -> pd.DataFrame:
             .reset_index())
 
 
-def thresholds(questions: Path) -> pd.DataFrame:
-    """Every labelled cell of the questions' CSVs relabelled with the other thresholds (the same intervals)."""
+def thresholds(*questions: Path) -> pd.DataFrame:
+    """Every labelled cell of the questions' CSVs relabelled with the other thresholds (the same intervals).
+    Rows without a label (described only, as Q9's mixed type) are not cells of a question and are skipped."""
     rows = []
-    for path in sorted(Path(questions).glob("*.csv")):
+    for path in sorted(p for d in questions for p in Path(d).glob("*.csv")):
         q = pd.read_csv(path)
         if not {"sim_lo", "sim_hi", "label"} <= set(q.columns):
             continue
+        q = q[q["label"].notna()].reset_index(drop=True)
         if "metric" in q.columns:                       # Q12: the log-ratio cells have their own threshold
             q = q[q["metric"] != "gm_relmae"].reset_index(drop=True)
         for delta in THRESHOLDS:
@@ -124,7 +126,15 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--questions", required=True, type=Path)
     parser.add_argument("--out", required=True, type=Path)
     parser.add_argument("--workers", type=int, default=1)
+    parser.add_argument("--thresholds-only", nargs="+", type=Path, metavar="DIR",
+                        help="round 2: only the threshold table, over the questions' CSVs of these directories")
     a = parser.parse_args(argv)
+    if a.thresholds_only:
+        a.out.mkdir(parents=True, exist_ok=True)
+        t = thresholds(*a.thresholds_only)
+        t.to_csv(a.out / "A7A8_thresholds.csv", index=False, float_format="%.10g")
+        print(t.groupby("delta")[["cells", "changed"]].sum())
+        return 0
     print(run(a.tables, a.data_dir, a.questions, a.out, a.workers))
     return 0
 
